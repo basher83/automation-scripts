@@ -28,6 +28,7 @@ jobs:
         run: yq --version
 
       - name: Transform labels
+        id: transform
         run: |
           yq eval '[.[] | .[]]' central-docs/mission-control/github-configs/label-definitions.yml > transformed-labels.yml
           echo "Transformed labels:"
