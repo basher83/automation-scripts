@@ -30,10 +30,22 @@ jobs:
       - name: Transform labels
         id: transform
         run: |
+          echo "Working directory:"
+          pwd
+          echo "Checking if source file exists:"
+          ls -la central-docs/mission-control/github-configs/label-definitions.yml
+          echo "First few lines of source file:"
+          head -20 central-docs/mission-control/github-configs/label-definitions.yml
+          echo "Transforming labels..."
           yq eval '[.[] | .[]]' central-docs/mission-control/github-configs/label-definitions.yml > transformed-labels.yml
-          echo "Transformed labels:"
-          cat transformed-labels.yml
-          echo "manifest_path=transformed-labels.yml" >> $GITHUB_OUTPUT
+          echo "Checking if transformed file was created:"
+          ls -la transformed-labels.yml
+          echo "First few lines of transformed file:"
+          head -20 transformed-labels.yml
+          echo "Setting output variable with absolute path:"
+          MANIFEST_PATH="$(pwd)/transformed-labels.yml"
+          echo "manifest_path=${MANIFEST_PATH}" >> $GITHUB_OUTPUT
+          echo "Verifying output was set to: ${MANIFEST_PATH}"
 
       - name: Sync labels to this repository
         uses: micnncim/action-label-syncer@v1.3.0
