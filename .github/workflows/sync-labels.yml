@@ -27,10 +27,9 @@ jobs:
       - name: Show yq version
         run: yq --version
 
-      - name: Transform label definitions
-        id: transform
+      - name: Transform labels
         run: |
-          yq 'reduce (.[].* | select(tag == "!!seq")) as $item ([]; . + $item)' central-docs/mission-control/github-configs/label-definitions.yml > transformed-labels.yml
+          yq eval '[.[] | .[]]' central-docs/mission-control/github-configs/label-definitions.yml > transformed-labels.yml
           echo "Transformed labels:"
           cat transformed-labels.yml
           echo "manifest_path=transformed-labels.yml" >> $GITHUB_OUTPUT
