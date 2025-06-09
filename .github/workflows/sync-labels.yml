@@ -1,0 +1,51 @@
+name: Sync Labels from Central Definition
+
+on:
+  workflow_dispatch: # Allows manual triggering, good for new repo setup
+  # You could also trigger it on push to main if this workflow file is part of a template
+  # push:
+  #   branches:
+  #     - main # Or your default branch
+  #   paths:
+  #     - '.github/workflows/sync-labels.yml' # To re-sync if the workflow itself changes
+
+jobs:
+  sync-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # To checkout the docs repo
+      issues: write   # To create/manage labels
+
+    steps:
+      - name: Checkout basher83/docs repository
+        uses: actions/checkout@v4
+        with:
+          repository: basher83/docs # Specify the central docs repository
+          path: central-docs        # Checkout to a specific subfolder
+          # If basher83/docs is a private repository, you'll need a PAT
+          # token: ${{ secrets.DOCS_REPO_PAT }} # PAT with repo scope for basher83/docs
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+        # For a more robust installation, consider using an action like:
+        # uses: mikefarah/yq@master # Or a specific version
+
+      - name: Transform label definitions
+        id: transform
+        run: |
+          # This yq command merges all arrays under the top-level keys into a single flat array
+          # and outputs it to a new file.
+          yq e 'reduce_values(. as $item | . + $item)' central-docs/mission-control/github-configs/label-definitions.yml > transformed-labels.yml
+          echo "Transformed labels:"
+          cat transformed-labels.yml
+          echo "::set-output name=manifest_path::transformed-labels.yml"
+
+      - name: Sync labels to this repository
+        uses: micnncim/action-label-syncer@v1.3.0 # Using a specific version is good practice
+        with:
+          manifest: ${{ steps.transform.outputs.manifest_path }}
+          prune: true # Deletes labels in this repo not present in the manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token for the current (new) repository
