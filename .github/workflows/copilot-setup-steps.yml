@@ -1,0 +1,65 @@
+name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tree curl wget gpg jq
+
+      - name: Install yq
+        run: |
+          wget https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -O /tmp/yq
+          sudo mv /tmp/yq /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bd01e18f51369d5a26f1651c3cb451d3417e3bba # v6.3.1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Make shell scripts executable
+        run: |
+          find . -name "*.sh" -type f -exec chmod +x {} \;
+
+      - name: Validate shell scripts
+        run: |
+          # Basic syntax check for shell scripts
+          find . -name "*.sh" -type f -exec bash -n {} \;
+
+      - name: Install Python dependencies (if they exist)
+        run: |
+          if [ -f "pyproject.toml" ]; then
+            echo "Installing Python dependencies..."
+            uv sync --dev
+          else
+            echo "No pyproject.toml found, skipping Python dependency installation"
+          fi
+
+      - name: Verify uv can run Python scripts
+        run: |
+          echo "uv is ready for single-file Python scripts"
+          uv --version
