@@ -3,7 +3,7 @@
 # Manual script to update tree structures in documentation files
 # Usage: ./scripts/update-trees.sh
 
-set -e
+set -euo pipefail
 
 # Colors for output
 GREEN='\033[0;32m'
