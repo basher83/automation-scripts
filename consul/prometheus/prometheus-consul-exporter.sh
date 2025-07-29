@@ -149,10 +149,11 @@ check_prerequisites() {
 get_consul_token() {
     log_info "Retrieving Consul management token from Infisical..."
     
-    # Check if already authenticated to Infisical
-    if ! infisical secrets 2>&1 | grep -q "apollo-13"; then
+    # Check if already authenticated to Infisical by attempting to list secrets
+    if ! infisical secrets get --path="/apollo-13/consul" --projectId="7b832220-24c0-45bc-a5f1-ce9794a31259" &>/dev/null; then
         log_error "Not authenticated to Infisical or missing access to apollo-13 project"
         log_info "Please run: infisical login"
+        log_info "Or check if you have access to the apollo-13 project"
         exit 1
     fi
     
