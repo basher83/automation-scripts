@@ -87,25 +87,25 @@ fi
 log_info() {
     local message="$*"
     echo -e "${GREEN}[INFO]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $message" >> "$LOG_FILE"
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $message" >> "$LOG_FILE" || true
 }
 
 log_warn() {
     local message="$*"
     echo -e "${YELLOW}[WARN]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $message" >> "$LOG_FILE"
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $message" >> "$LOG_FILE" || true
 }
 
 log_error() {
     local message="$*"
     echo -e "${RED}[ERROR]${NC} $message" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $message" >> "$LOG_FILE"
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $message" >> "$LOG_FILE" || true
 }
 
 log_success() {
     local message="$*"
     echo -e "${BLUE}[SUCCESS]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $message" >> "$LOG_FILE"
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $message" >> "$LOG_FILE" || true
 }
 
 # Function to check prerequisites
@@ -340,20 +340,26 @@ verify_consul() {
 
 # Main execution
 main() {
-    # Initialize log file
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE"
-    chmod 640 "$LOG_FILE"
-    
     log_info "Starting Consul Prometheus exporter setup..."
     log_info "Script: $SCRIPT_NAME"
     log_info "Consul address: $CONSUL_ADDR"
     
-    # Check if running as root (needed for Netdata config)
+    # Check if running as root (needed for Netdata config and log file)
     if [[ $EUID -ne 0 ]] && [[ "$SKIP_NETDATA" != "true" ]]; then
         log_error "This script must be run as root to configure Netdata"
         log_info "Use sudo or run as root, or use --skip-netdata"
+        log_info "For remote execution: curl -fsSL <url> | sudo bash"
         exit 1
+    fi
+    
+    # Initialize log file after root check
+    if [[ $EUID -eq 0 ]]; then
+        mkdir -p "$(dirname "$LOG_FILE")"
+        touch "$LOG_FILE"
+        chmod 640 "$LOG_FILE"
+        log_info "Logging to: $LOG_FILE"
+    else
+        log_warn "Not running as root - log file creation skipped"
     fi
     
     # Confirmation prompt
