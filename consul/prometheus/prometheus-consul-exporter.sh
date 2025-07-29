@@ -163,6 +163,9 @@ get_consul_token() {
     
     # Get token from Infisical
     CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="$INFISICAL_PROJECT_ID" --plain 2>/dev/null || true)
+    
+    # Trim any whitespace, newlines, or carriage returns from the token
+    CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -d '\r\n' | xargs)
 
     if [[ -z "$CONSUL_MASTER_TOKEN" ]]; then
         log_error "Failed to retrieve CONSUL_MASTER_TOKEN from Infisical"
@@ -177,6 +180,9 @@ get_consul_token() {
     # Export for consul commands
     export CONSUL_HTTP_TOKEN="$CONSUL_MASTER_TOKEN"
     export CONSUL_HTTP_ADDR="$CONSUL_ADDR"
+    
+    # Debug: Log token length (but not the token itself)
+    log_info "Token length: ${#CONSUL_MASTER_TOKEN} characters"
     
     log_success "Successfully retrieved Consul management token"
 }
