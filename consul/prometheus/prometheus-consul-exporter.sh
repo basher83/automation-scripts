@@ -155,17 +155,53 @@ check_prerequisites() {
 
 # Function to get Consul management token from Infisical
 get_consul_token() {
+    # Check if token is already provided via environment variable
+    if [[ -n "${CONSUL_MASTER_TOKEN:-}" ]]; then
+        log_info "Using Consul token from environment variable"
+        # Ensure it's trimmed
+        CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -d '\r\n' | xargs)
+        export CONSUL_HTTP_TOKEN="$CONSUL_MASTER_TOKEN"
+        export CONSUL_HTTP_ADDR="$CONSUL_ADDR"
+        log_info "Token length: ${#CONSUL_MASTER_TOKEN} characters"
+        log_success "Token configured from environment"
+        return 0
+    fi
+    
     log_info "Retrieving Consul management token from Infisical..."
     
     # Check if already authenticated to Infisical by testing if we can get the specific secret
     # We'll use the actual secret retrieval as the auth check
     log_info "Checking Infisical authentication..."
     
-    # Get token from Infisical
-    CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="$INFISICAL_PROJECT_ID" --plain 2>/dev/null || true)
+    # Get token from Infisical (capture stderr to check for login issues)
+    local infisical_output
+    local infisical_error
+    infisical_output=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="$INFISICAL_PROJECT_ID" --plain 2>&1)
+    infisical_error=$?
+    
+    # Check if the output contains login error messages
+    if echo "$infisical_output" | grep -q "login session\|trigger login flow\|infisical login"; then
+        log_error "Infisical session has expired or is invalid"
+        log_info "When using sudo, Infisical login doesn't transfer from your user session"
+        log_info "Options:"
+        log_info "  1. Login as root: sudo infisical login"
+        log_info "  2. Use environment variable: CONSUL_MASTER_TOKEN='your-token' sudo ./$(basename "$0")"
+        log_info "  3. Download and run: wget <script-url> && sudo ./$(basename "$0")"
+        exit 1
+    fi
+    
+    # Extract just the token value if successful
+    if [[ $infisical_error -eq 0 ]]; then
+        CONSUL_MASTER_TOKEN=$(echo "$infisical_output" | tail -1)
+    else
+        CONSUL_MASTER_TOKEN=""
+    fi
     
     # Trim any whitespace, newlines, or carriage returns from the token
     CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -d '\r\n' | xargs)
+    
+    # Additional sanitization - remove any non-printable characters
+    CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -cd '[:print:]')
 
     if [[ -z "$CONSUL_MASTER_TOKEN" ]]; then
         log_error "Failed to retrieve CONSUL_MASTER_TOKEN from Infisical"

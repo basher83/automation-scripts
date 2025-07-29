@@ -144,7 +144,14 @@ For quick deployment without cloning the repository:
 
 ```bash
 # With sudo (required for Netdata configuration)
+# Note: You must be logged into Infisical in the root environment
+sudo infisical login  # Login as root first
 curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh | sudo bash
+
+# Alternative: Download and run locally
+wget https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh
+chmod +x prometheus-consul-exporter.sh
+sudo ./prometheus-consul-exporter.sh
 
 # Without Netdata configuration (no root required)
 curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh | bash -s -- --skip-netdata
