@@ -241,7 +241,8 @@ if ! command -v uv &> /dev/null; then
     fi
     
     # Additional safety check - verify the script contains expected uv installation markers
-    if ! grep -q "astral.sh/uv" "$tmp_installer" || ! grep -q "cargo install" "$tmp_installer"; then
+    # Modern uv installer downloads pre-built binaries, not via cargo install
+    if ! grep -q "astral.sh/uv" "$tmp_installer" || ! grep -q "APP_NAME=\"uv\"" "$tmp_installer"; then
         echo "Installer doesn't appear to be the official uv installer"
         exit 1
     fi
@@ -272,18 +273,21 @@ if ! command -v uv &> /dev/null; then
     echo "Running uv installer..."
     sh "$tmp_installer"
     
-    # Add uv to PATH for current session
-    export PATH="$HOME/.cargo/bin:$PATH"
+    # The modern uv installer installs to ~/.local/bin, not ~/.cargo/bin
+    # Add ~/.local/bin to PATH for current session (if not already there)
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
     
     # Persist PATH update for future sessions
     echo "Updating shell configuration..."
-    cargo_path_line='export PATH="$HOME/.cargo/bin:$PATH"'
+    local_bin_path_line='export PATH="$HOME/.local/bin:$PATH"'
     
     # Update shell configuration files
     for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-        if [ -f "$rc_file" ] && ! grep -q ".cargo/bin" "$rc_file"; then
-            echo "$cargo_path_line" >> "$rc_file"
-            echo "Added cargo bin to $(basename "$rc_file")"
+        if [ -f "$rc_file" ] && ! grep -q "\\.local/bin" "$rc_file"; then
+            echo "$local_bin_path_line" >> "$rc_file"
+            echo "Added .local/bin to $(basename "$rc_file")"
         fi
     done
     
