@@ -2,7 +2,7 @@
 name: repository-analyst
 description: Use proactively when deep understanding of a GitHub repository is needed - for architecture analysis, documentation review, implementation details, or integration planning
 tools: Bash, mcp__deepwiki__ask_question, mcp__deepwiki__read_wiki_contents, mcp__deepwiki__read_wiki_structure
-color: Cyan
+color: Purple
 ---
 
 # Purpose
