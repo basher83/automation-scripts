@@ -157,8 +157,8 @@ get_consul_token() {
     fi
     
     # Get token from Infisical
-    CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --plain 2>/dev/null || true)
-    
+    CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="7b832220-24c0-45bc-a5f1-ce9794a31259" --plain 2>/dev/null || true)
+
     if [[ -z "$CONSUL_MASTER_TOKEN" ]]; then
         log_error "Failed to retrieve CONSUL_MASTER_TOKEN from Infisical"
         log_info "Ensure you have access to /apollo-13/consul/CONSUL_MASTER_TOKEN"
