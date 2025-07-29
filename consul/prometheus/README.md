@@ -123,17 +123,34 @@ graph TB
 
 ## Installation
 
-### 1. Clone the Repository
+### Option 1: Local Installation
+
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/basher83/automation-scripts.git
 cd automation-scripts/consul/prometheus
 ```
 
-### 2. Make Script Executable
+#### 2. Make Script Executable
 
 ```bash
 chmod +x prometheus-consul-exporter.sh
+```
+
+### Option 2: Remote Execution
+
+For quick deployment without cloning the repository:
+
+```bash
+# With sudo (required for Netdata configuration)
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh | sudo bash
+
+# Without Netdata configuration (no root required)
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh | bash -s -- --skip-netdata
+
+# Non-interactive mode with sudo
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/consul/prometheus/prometheus-consul-exporter.sh | sudo bash -s -- --non-interactive
 ```
 
 ### 3. Verify Prerequisites
