@@ -1,17 +1,68 @@
 #!/bin/bash
+
+# Bootstrap Script for Modern CLI Tools
+# Installs eza, fd-find, uv, and ripgrep on Debian/Ubuntu systems
+# 
+# Usage:
+#   ./bootstrap.sh
+#   curl -fsSL https://example.com/bootstrap.sh | bash
+#
+# Environment Variables:
+#   EZA_SKIP_GPG_VERIFY=1     Skip GPG verification for eza
+#   UV_INSTALL_SKIP_CONFIRM=1 Skip confirmation for uv installer
+#   NO_COLOR=1                Disable colored output
+
 set -euo pipefail
+trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 IFS=$'\n\t'
+
+# Color codes for output (check if terminal supports colors)
+if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
+    readonly GREEN='\033[0;32m'
+    readonly YELLOW='\033[1;33m'
+    readonly RED='\033[0;31m'
+    readonly BLUE='\033[0;34m'
+    readonly NC='\033[0m' # No Color
+else
+    readonly GREEN=''
+    readonly YELLOW=''
+    readonly RED=''
+    readonly BLUE=''
+    readonly NC=''
+fi
+
+# Logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*"
+}
+
+log_step() {
+    echo -e "${BLUE}[STEP]${NC} $*"
+}
+
+# Script header
+log_info "Bootstrap Script - Installing Modern CLI Tools"
+log_info "Tools: eza, fd-find, uv, ripgrep"
+echo
 
 # (rest of bootstrap.sh follows)
 # Install eza - a modern replacement for ls
 # Security Note: GPG key verification is interactive by default to avoid hardcoding
 # fingerprints that may change. For automated installations, set EZA_SKIP_GPG_VERIFY=1
 # or verify the fingerprint manually at https://github.com/eza-community/eza
-echo "Checking eza..."
+log_step "Checking eza..."
 
 # Check if eza is already installed
 if ! command -v eza &> /dev/null; then
-    echo "Installing eza..."
+    log_info "Installing eza..."
     
     # Ensure required tools are installed
     missing_tools=""
@@ -19,7 +70,7 @@ if ! command -v eza &> /dev/null; then
     ! command -v wget &> /dev/null && missing_tools="$missing_tools wget"
     
     if [ -n "$missing_tools" ]; then
-        echo "Installing required tools:$missing_tools"
+        log_info "Installing required tools:$missing_tools"
         # Note: We'll update package index later after adding repository
         sudo apt-get update
         sudo apt-get install -y $missing_tools
@@ -27,18 +78,18 @@ if ! command -v eza &> /dev/null; then
     
     # Check if repository is already configured
     if [ ! -f "/etc/apt/keyrings/gierens.gpg" ] || [ ! -f "/etc/apt/sources.list.d/gierens.list" ]; then
-        echo "Adding eza repository..."
+        log_info "Adding eza repository..."
         sudo mkdir -p /etc/apt/keyrings
         
         # Remove existing file if it exists (shouldn't happen with the check above)
         [ -f "/etc/apt/keyrings/gierens.gpg" ] && sudo rm -f /etc/apt/keyrings/gierens.gpg
         
         # Download GPG key to temporary file
-        echo "Downloading eza repository key..."
+        log_info "Downloading eza repository key..."
         tmp_key=$(mktemp)
         
         if ! wget -qO "$tmp_key" https://raw.githubusercontent.com/eza-community/eza/main/deb.asc; then
-            echo "Failed to download eza GPG key"
+            log_error "Failed to download eza GPG key"
             exit 1
         fi
         
@@ -61,7 +112,7 @@ if ! command -v eza &> /dev/null; then
             # Try uppercase conversion in case of lowercase hex
             key_fingerprint_upper=$(echo "$key_fingerprint" | tr '[:lower:]' '[:upper:]')
             if [[ ! "$key_fingerprint_upper" =~ ^[A-F0-9]{40}$ ]]; then
-                echo "Warning: Invalid or missing key fingerprint"
+                log_warn "Warning: Invalid or missing key fingerprint"
                 echo "Expected 40 character hex string, got: '$key_fingerprint'"
                 echo "GPG output format may have changed or locale settings may affect parsing"
                 echo "Proceeding with key display for manual verification"
@@ -78,7 +129,7 @@ if ! command -v eza &> /dev/null; then
         
         # For automated/CI environments, allow skipping confirmation
         if [ -n "${EZA_SKIP_GPG_VERIFY:-}" ]; then
-            echo "Skipping GPG verification (EZA_SKIP_GPG_VERIFY is set)"
+            log_warn "Skipping GPG verification (EZA_SKIP_GPG_VERIFY is set)"
         elif [ -t 0 ]; then
             # Interactive mode - ask for confirmation
             echo ""
@@ -111,16 +162,16 @@ if ! command -v eza &> /dev/null; then
         rm -f "$tmp_key"
         rm -rf "$tmp_keyring"
     else
-        echo "eza repository already configured"
+        log_info "eza repository already configured"
     fi
     
     # Install eza
-    echo "Installing eza package..."
+    log_info "Installing eza package..."
     sudo apt-get update
     sudo apt-get install -y eza
-    echo "eza installed successfully!"
+    log_info "✓ eza installed successfully!"
 else
-    echo "eza is already installed"
+    log_info "eza is already installed"
 fi
 
 # Function to check if ~/.local/bin is in PATH and provide instructions
@@ -147,33 +198,33 @@ create_fd_symlink() {
     if [ -e "$link" ] || [ -L "$link" ]; then
         # Check if it's already the correct symlink
         if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
-            echo "Symlink already correctly configured"
+            log_info "Symlink already correctly configured"
         else
-            echo "Removing existing fd file/symlink"
+            log_info "Removing existing fd file/symlink"
             rm -f "$link"
             ln -nsf "$target" "$link"
-            echo "Created symlink: fd -> $target"
+            log_info "Created symlink: fd -> $target"
         fi
     else
         ln -nsf "$target" "$link"
-        echo "Created symlink: fd -> $target"
+        log_info "Created symlink: fd -> $target"
     fi
 }
 
 # Install fd-find - a modern replacement for find
-echo "Checking fd..."
+log_step "Checking fd..."
 
 # Check if fd is already available (either as fd or fdfind)
 if ! command -v fd &> /dev/null && ! command -v fdfind &> /dev/null; then
-    echo "Installing fd-find..."
+    log_info "Installing fd-find..."
     
     # Install fd-find package
     sudo apt-get update
     sudo apt-get install -y fd-find
-    echo "fd-find installed successfully!"
+    log_info "✓ fd-find installed successfully!"
     
     # Create symlink for fd command
-    echo "Setting up fd symlink..."
+    log_info "Setting up fd symlink..."
     create_fd_symlink
     
     # Check if ~/.local/bin is in PATH
@@ -181,36 +232,36 @@ if ! command -v fd &> /dev/null && ! command -v fdfind &> /dev/null; then
 else
     # Check if we have fd command specifically
     if command -v fdfind &> /dev/null && ! command -v fd &> /dev/null; then
-        echo "fd-find is installed but 'fd' command not available"
-        echo "Creating fd symlink..."
+        log_info "fd-find is installed but 'fd' command not available"
+        log_info "Creating fd symlink..."
         create_fd_symlink
         
         # Check PATH again
         check_local_bin_path
     else
-        echo "fd is already installed and available"
+        log_info "fd is already installed and available"
     fi
 fi
 
 # Install uv - Python package installer
-echo "Checking uv..."
+log_step "Checking uv..."
 
 # Check if uv is already installed
 if ! command -v uv &> /dev/null; then
-    echo "Installing uv..."
+    log_info "Installing uv..."
     
     # Ensure curl is installed
     if ! command -v curl &> /dev/null; then
-        echo "Installing curl..."
+        log_info "Installing curl..."
         sudo apt-get install -y curl || {
-            echo "Failed to install curl, updating package index..."
+            log_error "Failed to install curl, updating package index..."
             sudo apt-get update
             sudo apt-get install -y curl
         }
     fi
     
     # Download installer to a temporary file for inspection
-    echo "Downloading uv installer..."
+    log_info "Downloading uv installer..."
     tmp_installer=$(mktemp)
     trap "rm -f $tmp_installer" EXIT
     
@@ -218,7 +269,7 @@ if ! command -v uv &> /dev/null; then
     UV_INSTALLER_URL="https://astral.sh/uv/install.sh"
     
     if ! curl -LsSf -o "$tmp_installer" "$UV_INSTALLER_URL"; then
-        echo "Failed to download uv installer"
+        log_error "Failed to download uv installer"
         exit 1
     fi
     
@@ -280,31 +331,42 @@ if ! command -v uv &> /dev/null; then
     fi
     
     # Persist PATH update for future sessions
-    echo "Updating shell configuration..."
+    log_info "Updating shell configuration..."
     local_bin_path_line='export PATH="$HOME/.local/bin:$PATH"'
     
     # Update shell configuration files
     for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
         if [ -f "$rc_file" ] && ! grep -q "\\.local/bin" "$rc_file"; then
             echo "$local_bin_path_line" >> "$rc_file"
-            echo "Added .local/bin to $(basename "$rc_file")"
+            log_info "Added .local/bin to $(basename "$rc_file")"
         fi
     done
     
-    echo "uv installed successfully!"
+    log_info "✓ uv installed successfully!"
 else
-    echo "uv is already installed"
+    log_info "uv is already installed"
 fi
 
 # Install ripgrep - a fast search tool
-echo "Installing ripgrep..."
+log_info "Installing ripgrep..."
 
 # Check if ripgrep is already installed
 if ! command -v rg &> /dev/null; then
-    echo "Installing ripgrep package..."
+    log_info "Installing ripgrep package..."
     sudo apt-get update
     sudo apt-get install -y ripgrep
-    echo "ripgrep installed successfully!"
+    log_info "✓ ripgrep installed successfully!"
 else
-    echo "ripgrep is already installed"
+    log_info "ripgrep is already installed"
 fi
+
+# Summary
+echo
+log_info "Bootstrap completed successfully!"
+log_info "Installed tools:"
+log_info "  - eza: Modern replacement for ls"
+log_info "  - fd: User-friendly alternative to find"
+log_info "  - uv: Ultra-fast Python package installer"
+log_info "  - ripgrep: Lightning-fast recursive search"
+echo
+log_info "You may need to restart your shell or run: source ~/.bashrc"

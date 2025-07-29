@@ -1,23 +1,52 @@
 #!/bin/bash
 
-# Manual script to update tree structures in documentation files
-# Usage: ./scripts/update-trees.sh
+# Documentation Tree Update Script
+# Updates tree structures in documentation files between marker comments
+# 
+# Usage:
+#   ./update-trees.sh
+#
+# Markers:
+#   <!-- TREE-START -->
+#   (tree content gets updated here)
+#   <!-- TREE-END -->
 
 set -euo pipefail
+trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# Color codes for output (check if terminal supports colors)
+if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
+    readonly GREEN='\033[0;32m'
+    readonly YELLOW='\033[1;33m'
+    readonly RED='\033[0;31m'
+    readonly NC='\033[0m' # No Color
+else
+    readonly GREEN=''
+    readonly YELLOW=''
+    readonly RED=''
+    readonly NC=''
+fi
 
-echo -e "${GREEN}🌳 Updating documentation trees...${NC}"
+# Logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*"
+}
+
+log_info "🌳 Updating documentation trees..."
 
 # Check if tree command is available
 if ! command -v tree &> /dev/null; then
-    echo -e "${RED}Error: 'tree' command not found. Please install it:${NC}"
-    echo "  Ubuntu/Debian: sudo apt-get install tree"
-    echo "  MacOS: brew install tree"
+    log_error "'tree' command not found. Please install it:"
+    log_info "  Ubuntu/Debian: sudo apt-get install tree"
+    log_info "  MacOS: brew install tree"
     exit 1
 fi
 
@@ -28,17 +57,17 @@ update_tree_in_file() {
     local tree_flags="${3:--a -I '.git|node_modules|.DS_Store' --charset ascii}"
     
     if [[ ! -f "$file" ]]; then
-        echo -e "${YELLOW}Warning: File $file not found, skipping...${NC}"
+        log_warn "File $file not found, skipping..."
         return
     fi
     
     # Check if file has tree markers
     if ! grep -q "<!-- TREE-START -->" "$file" || ! grep -q "<!-- TREE-END -->" "$file"; then
-        echo -e "${YELLOW}Warning: Tree markers not found in $file, skipping...${NC}"
+        log_warn "Tree markers not found in $file, skipping..."
         return
     fi
     
-    echo -e "📄 Updating tree in: $file"
+    log_info "📄 Updating tree in: $file"
     
     # Generate tree
     local tree_output=$(tree $directory $tree_flags)
@@ -69,11 +98,13 @@ update_tree_in_file() {
     # Replace original file
     mv "$temp_file" "$file"
     
-    echo -e "${GREEN}✓ Updated tree in $file${NC}"
+    log_info "✓ Updated tree in $file"
 }
 
 # Update trees in various documentation files
-echo -e "\n${GREEN}Updating documentation trees...${NC}\n"
+echo
+log_info "Updating documentation trees..."
+echo
 
 # Update core-github-repos.md - main tree
 update_tree_in_file "mission-control/core-github-repos.md" "." "-L 2 -d -I '.git|node_modules|.DS_Store|.github|.cursor' --charset ascii"
@@ -101,5 +132,6 @@ update_tree_in_file "README.md" "." "-L 3 -d -I '.git|node_modules|.DS_Store|.gi
 # Add more files as needed
 # update_tree_in_file "path/to/file.md" "directory/to/scan" "optional-tree-flags"
 
-echo -e "\n${GREEN}🎉 Tree update complete!${NC}"
-echo -e "${YELLOW}Note: Don't forget to commit the changes if they look good.${NC}"
+echo
+log_info "🎉 Tree update complete!"
+log_warn "Note: Don't forget to commit the changes if they look good."
