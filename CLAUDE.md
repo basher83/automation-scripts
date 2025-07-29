@@ -9,6 +9,7 @@ This is a collection of automation scripts for DevOps and system administration 
 ## Common Development Commands
 
 ### Script Validation and Execution
+
 ```bash
 # Validate all shell scripts for syntax errors
 find . -name "*.sh" -type f -exec bash -n {} \;
@@ -21,6 +22,7 @@ find . -name "*.sh" -type f -exec chmod +x {} \;
 ```
 
 ### Code Search and Navigation
+
 ```bash
 # Search using ripgrep (preferred over grep)
 rg "pattern" --type sh
@@ -33,6 +35,7 @@ eza -la --tree --level=2
 ```
 
 ### Documentation Updates
+
 ```bash
 # Update tree structures in documentation files
 ./documentation/update-trees.sh
@@ -41,12 +44,15 @@ eza -la --tree --level=2
 ## Architecture and Conventions
 
 ### Directory Structure
+
 - Each major feature has its own directory (bootstrap/, checkmk/, proxmox-backup-server/, proxmox-virtual-environment/)
 - Scripts are self-contained and can be run independently
 - README.md files in subdirectories provide component-specific documentation
 
 ### Shell Script Patterns
+
 All scripts follow these conventions:
+
 - Start with `#!/bin/bash`
 - Use `set -euo pipefail` for strict error handling
 - Include color output using ANSI escape codes
@@ -55,12 +61,14 @@ All scripts follow these conventions:
 - Include `trap` for cleanup on exit
 
 ### Security Practices
+
 - GPG verification for package installations (optional in bootstrap.sh)
 - SHA-256 checksum validation for downloaded scripts
 - Interactive confirmation before executing downloaded content
 - Never commit sensitive information (API keys, tokens)
 
 ### CI/CD
+
 - GitHub Actions workflow validates shell scripts on every push
 - Label definitions are synced from basher83/docs repository
 - Renovate handles dependency updates
@@ -68,7 +76,9 @@ All scripts follow these conventions:
 ## Key Scripts
 
 ### bootstrap/bootstrap.sh
+
 Installs modern CLI tools (eza, fd, uv, ripgrep). Supports both local and remote execution:
+
 ```bash
 # Local execution
 ./bootstrap/bootstrap.sh
@@ -78,13 +88,17 @@ curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/bo
 ```
 
 ### checkmk/install-checkmk-agent.sh
+
 Installs CheckMK monitoring agent on Ubuntu/Debian systems with proper validation.
 
 ### proxmox-backup-server/check-host-backup-health.sh
+
 Checks backup health status from Proxmox Backup Server using API calls.
 
 ### proxmox-virtual-environment/pve-backup-status.sh
+
 Displays Proxmox VE backup task status with enhanced error handling and colored output:
+
 ```bash
 # Show last 10 backup tasks (default)
 ./proxmox-virtual-environment/pve-backup-status.sh
@@ -95,7 +109,9 @@ Displays Proxmox VE backup task status with enhanced error handling and colored 
 # Show without colors (for piping/logging)
 ./proxmox-virtual-environment/pve-backup-status.sh 10 --no-color
 ```
+
 Features:
+
 - Parses Proxmox task logs to show backup status (OK/ERROR/UNKNOWN)
 - Displays VM names, backup duration, and success/failure counts
 - Uses ripgrep for efficient log parsing
@@ -103,6 +119,7 @@ Features:
 - Auto-detects terminal color support
 
 ### documentation/update-trees.sh
+
 Updates ASCII tree representations in documentation files between marker comments.
 
 ## Development Notes
