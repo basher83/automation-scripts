@@ -31,6 +31,7 @@ readonly LOG_FILE="/var/log/consul-prometheus-setup.log"
 readonly POLICY_NAME="prometheus-scraping"
 readonly TOKEN_DESCRIPTION="Prometheus/Netdata scraping token"
 readonly CONSUL_ADDR_DEFAULT="http://127.0.0.1:8500"
+readonly INFISICAL_PROJECT_ID="${INFISICAL_PROJECT_ID:-7b832220-24c0-45bc-a5f1-ce9794a31259}"
 
 # Parse command line arguments
 FORCE_MODE=false
@@ -149,20 +150,20 @@ check_prerequisites() {
 get_consul_token() {
     log_info "Retrieving Consul management token from Infisical..."
     
-    # Check if already authenticated to Infisical by attempting to list secrets
-    if ! infisical secrets get --path="/apollo-13/consul" --projectId="7b832220-24c0-45bc-a5f1-ce9794a31259" &>/dev/null; then
-        log_error "Not authenticated to Infisical or missing access to apollo-13 project"
-        log_info "Please run: infisical login"
-        log_info "Or check if you have access to the apollo-13 project"
-        exit 1
-    fi
+    # Check if already authenticated to Infisical by testing if we can get the specific secret
+    # We'll use the actual secret retrieval as the auth check
+    log_info "Checking Infisical authentication..."
     
     # Get token from Infisical
-    CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="7b832220-24c0-45bc-a5f1-ce9794a31259" --plain 2>/dev/null || true)
+    CONSUL_MASTER_TOKEN=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="$INFISICAL_PROJECT_ID" --plain 2>/dev/null || true)
 
     if [[ -z "$CONSUL_MASTER_TOKEN" ]]; then
         log_error "Failed to retrieve CONSUL_MASTER_TOKEN from Infisical"
-        log_info "Ensure you have access to /apollo-13/consul/CONSUL_MASTER_TOKEN"
+        log_info "Possible causes:"
+        log_info "  1. Not authenticated - run: infisical login"
+        log_info "  2. Missing access to apollo-13 project"
+        log_info "  3. Secret doesn't exist at /apollo-13/consul/CONSUL_MASTER_TOKEN"
+        log_info "  4. Incorrect projectId: $INFISICAL_PROJECT_ID"
         exit 1
     fi
     
