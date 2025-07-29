@@ -126,6 +126,10 @@ check_prerequisites() {
         missing_tools+=("jq")
     fi
     
+    if ! command -v curl &> /dev/null; then
+        missing_tools+=("curl")
+    fi
+    
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         log_info "Install missing tools:"
@@ -139,6 +143,9 @@ check_prerequisites() {
                     ;;
                 jq)
                     log_info "  jq: sudo apt-get install jq"
+                    ;;
+                curl)
+                    log_info "  curl: sudo apt-get install curl"
                     ;;
             esac
         done
@@ -331,9 +338,14 @@ EOF
 verify_consul() {
     log_info "Verifying Consul connectivity..."
     
-    if ! consul info &>/dev/null; then
+    # Test with a simple API call
+    if ! curl -sf "${CONSUL_ADDR}/v1/status/leader" >/dev/null; then
         log_error "Cannot connect to Consul at $CONSUL_ADDR"
         log_info "Check if Consul is running and accessible"
+        # Test if it's an IPv6 issue
+        if [[ "$CONSUL_ADDR" == *"127.0.0.1"* ]]; then
+            log_info "Tip: If Consul is only listening on IPv6, try: --consul-addr http://[::1]:8500"
+        fi
         exit 1
     fi
     
