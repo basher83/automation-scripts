@@ -399,15 +399,15 @@ add_rule() {
         fi
     fi
     
-    # Add the rule at position 0 (top of chain)
-    # Note: position parameter goes after "insert rule" but before the match conditions
-    local cmd="nft insert rule $family $table $chain position 0 $protocol dport $port accept"
+    # Add the rule at the beginning of the chain
+    # insert rule adds at the beginning by default (no position parameter needed)
+    local cmd="nft insert rule $family $table $chain $protocol dport $port accept"
     
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would execute: $cmd"
     else
         if eval "$cmd"; then
-            log_success "Added rule: $protocol port $port -> ACCEPT"
+            log_success "Added rule: $protocol port $port -> ACCEPT (at beginning of chain)"
         else
             log_error "Failed to add rule"
             return 1
