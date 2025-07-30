@@ -468,23 +468,27 @@ save_ruleset() {
     
     # Create temporary file
     local tmp_file=$(mktemp)
-    trap 'rm -f "$tmp_file"' EXIT
     
     # Save ruleset to temporary file
     if ! nft list ruleset > "$tmp_file" 2>/dev/null; then
         log_error "Failed to export ruleset"
+        rm -f "$tmp_file"
         return 1
     fi
     
     # Validate the exported ruleset
     if ! nft -c -f "$tmp_file" 2>/dev/null; then
         log_error "Exported ruleset validation failed"
+        rm -f "$tmp_file"
         return 1
     fi
     
     # Copy to config file
     cp "$tmp_file" "$CONFIG_FILE"
     chmod 644 "$CONFIG_FILE"
+    
+    # Clean up temporary file
+    rm -f "$tmp_file"
     
     log_success "Ruleset saved to $CONFIG_FILE"
 }
