@@ -104,18 +104,29 @@ if pveum user token list $USERNAME 2>/dev/null | grep -q "$TOKEN_NAME"; then
     exit 1
 fi
 
-# Create token with privilege separation
+# Create token without privilege separation for compatibility
 log_info "Creating API token..."
-TOKEN_OUTPUT=$(pveum user token add $USERNAME $TOKEN_NAME --privsep 1)
+TOKEN_OUTPUT=$(pveum user token add $USERNAME $TOKEN_NAME --privsep 0)
 
-# Extract the token value
-TOKEN_VALUE=$(echo "$TOKEN_OUTPUT" | grep "│ value" | awk -F'│' '{print $3}' | xargs)
+# Extract the token value from the table format
+# Format: │ value        │ dc787432-624c-49b2-9a69-1d6a23f61261 │
+TOKEN_VALUE=$(echo "$TOKEN_OUTPUT" | grep "^│ value" | awk -F'│' '{print $3}' | xargs)
 
 if [[ -z "$TOKEN_VALUE" ]]; then
     log_error "Failed to extract token value"
     echo "$TOKEN_OUTPUT"
     exit 1
 fi
+
+# Verify token looks valid (should be a UUID format)
+if [[ ! "$TOKEN_VALUE" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
+    log_error "Extracted token doesn't look valid: $TOKEN_VALUE"
+    log_error "Token output was:"
+    echo "$TOKEN_OUTPUT"
+    exit 1
+fi
+
+log_info "Token extracted successfully"
 
 # Grant PVEAuditor role to token
 log_info "Granting PVEAuditor role to token"
