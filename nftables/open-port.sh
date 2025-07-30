@@ -89,31 +89,54 @@ setup_colors() {
 log_info() {
     local message="$*"
     echo -e "${GREEN}[INFO]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $message" >> "$LOG_FILE"
+    if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 log_warn() {
     local message="$*"
     echo -e "${YELLOW}[WARN]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: $message" >> "$LOG_FILE"
+    if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 log_error() {
     local message="$*"
     echo -e "${RED}[ERROR]${NC} $message" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $message" >> "$LOG_FILE"
+    if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 log_step() {
     local message="$*"
     echo -e "${BLUE}[STEP]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP: $message" >> "$LOG_FILE"
+    if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 log_success() {
     local message="$*"
     echo -e "${GREEN}[SUCCESS]${NC} $message"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $message" >> "$LOG_FILE"
+    if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+# Confirm action helper
+confirm_action() {
+    local prompt="$1"
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        read -p "$prompt [y/N] " -n 1 -r
+        echo
+        [[ $REPLY =~ ^[Yy]$ ]]
+    else
+        log_info "Auto-accepting: $prompt"
+        return 0
+    fi
 }
 
 # Error handler
@@ -256,23 +279,28 @@ check_nftables() {
         exit 1
     fi
     
-    # Check if nftables service exists
-    if ! systemctl list-unit-files | grep -q "^nftables.service"; then
-        log_error "nftables service not found"
-        exit 1
-    fi
-    
-    # Check if nftables is running (warning only)
-    if ! systemctl is-active --quiet nftables; then
-        log_warn "nftables service is not running"
-        if [[ -t 0 ]] && [[ "$DRY_RUN" == "false" ]]; then
-            read -p "Do you want to start nftables service? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                systemctl start nftables
-                log_info "Started nftables service"
+    # Check if nftables service exists (non-fatal if missing)
+    if systemctl list-unit-files 2>/dev/null | grep -q "^nftables\.service"; then
+        # Service exists, check if it's running
+        if ! systemctl is-active --quiet nftables 2>/dev/null; then
+            log_warn "nftables service is not running"
+            if [[ "$INTERACTIVE" == "true" ]] && [[ "$DRY_RUN" == "false" ]]; then
+                if confirm_action "Start nftables service?"; then
+                    systemctl start nftables
+                    log_info "Started nftables service"
+                fi
             fi
         fi
+    else
+        # Service doesn't exist, but nft command works - this is OK
+        log_warn "nftables service not found, but nft command is available"
+        log_info "Rules will be applied but may not persist after reboot without service"
+    fi
+    
+    # Test if we can actually use nft
+    if ! nft list tables &>/dev/null; then
+        log_error "Cannot access nftables. Are you running as root?"
+        exit 1
     fi
 }
 
@@ -462,7 +490,14 @@ save_ruleset() {
 
 # Enable nftables service
 enable_service() {
-    if systemctl is-enabled --quiet nftables; then
+    # Check if service exists before trying to enable it
+    if ! systemctl list-unit-files 2>/dev/null | grep -q "^nftables\.service"; then
+        log_warn "nftables service not found, skipping service enablement"
+        log_info "You may need to manually configure nftables to start at boot"
+        return 0
+    fi
+    
+    if systemctl is-enabled --quiet nftables 2>/dev/null; then
         log_info "nftables service is already enabled"
     else
         log_step "Enabling nftables service..."
