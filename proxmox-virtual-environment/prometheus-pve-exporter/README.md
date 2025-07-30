@@ -17,6 +17,7 @@ Production-ready installation and management scripts for the Prometheus PVE Expo
 1. [Prometheus Integration](#prometheus-integration)
 1. [Uninstallation](#uninstallation)
 1. [Troubleshooting](#troubleshooting)
+1. [Token Management](#token-management)
 1. [Security Considerations](#security-considerations)
 1. [References](#references)
 
@@ -360,13 +361,22 @@ Common causes:
 
 #### Authentication Errors
 
+The easiest way to fix authentication errors like "401 Unauthorized: invalid token value!" is to use the automated `fix-token.sh` script:
+
+```bash
+# Fix token issues automatically
+./fix-token.sh
+```
+
+This script handles the entire token recreation process safely. For manual troubleshooting:
+
 1. Verify token exists:
 
    ```bash
    pveum user token list prometheus@pve
    ```
 
-1. Regenerate token if needed:
+1. Regenerate token manually if needed (see [Token Management](#token-management) section for automated approach):
 
    ```bash
    pveum user token remove prometheus@pve monitoring
@@ -390,6 +400,179 @@ If experiencing high CPU usage:
 1. Reduce scrape frequency in Prometheus
 1. Limit metrics collection (disable cluster or node metrics)
 1. Check for API rate limiting
+
+## Token Management
+
+### Overview
+
+The `fix-token.sh` script provides an automated solution for managing Prometheus PVE Exporter API tokens. This script is essential for resolving authentication issues and recreating tokens when they become invalid or corrupted.
+
+### When to Use fix-token.sh
+
+Use the token fix script in these scenarios:
+
+1. **401 Unauthorized Errors**: When the exporter reports "invalid token value!" errors
+1. **Token Expiration**: If tokens have been manually removed or expired
+1. **After Proxmox Updates**: Major Proxmox updates may invalidate existing tokens
+1. **Security Rotation**: Periodic token rotation for security compliance
+1. **Migration/Restore**: After restoring Proxmox from backup where tokens may be inconsistent
+
+### Usage Examples
+
+#### Local Execution
+
+Run directly on the Proxmox host:
+
+```bash
+# Standard execution
+cd /path/to/automation-scripts/proxmox-virtual-environment/prometheus-pve-exporter
+./fix-token.sh
+
+# Non-interactive mode (no prompts)
+NON_INTERACTIVE=true ./fix-token.sh
+```
+
+#### Remote Execution
+
+Execute via curl for automated deployments:
+
+```bash
+# Download and run in one command
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/proxmox-virtual-environment/prometheus-pve-exporter/fix-token.sh | sudo bash
+
+# With non-interactive mode
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/proxmox-virtual-environment/prometheus-pve-exporter/fix-token.sh | sudo NON_INTERACTIVE=true bash
+```
+
+#### Ansible Integration
+
+Example Ansible task for token management:
+
+```yaml
+- name: Fix Prometheus PVE Exporter token
+  shell: |
+    curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/proxmox-virtual-environment/prometheus-pve-exporter/fix-token.sh | NON_INTERACTIVE=true bash
+  become: yes
+  when: prometheus_token_needs_fix | default(false)
+```
+
+#### Scheduled Maintenance
+
+Add to crontab for periodic token rotation:
+
+```bash
+# Rotate token monthly at 2 AM on the 1st
+0 2 1 * * /opt/automation-scripts/proxmox-virtual-environment/prometheus-pve-exporter/fix-token.sh > /var/log/pve-exporter-token-rotation.log 2>&1
+```
+
+### What the Script Does
+
+The `fix-token.sh` script performs the following steps:
+
+1. **Validation Phase**:
+   - Verifies root privileges
+   - Confirms Proxmox VE environment
+   - Checks service installation
+   - Validates required dependencies
+
+1. **Token Removal**:
+   - Checks for existing token
+   - Safely removes old token if present
+   - Logs removal status
+
+1. **Token Creation**:
+   - Generates new API token with privilege separation
+   - Extracts token value from Proxmox output
+   - Validates token format
+
+1. **Permission Assignment**:
+   - Grants PVEAuditor role to the new token
+   - Ensures read-only access to cluster metrics
+
+1. **Configuration Update**:
+   - Backs up existing configuration
+   - Updates `/etc/prometheus/pve.yml` with new token
+   - Sets secure file permissions (640)
+
+1. **Service Restart**:
+   - Implements retry mechanism for service restart
+   - Waits for service to become active
+   - Maximum 3 attempts with exponential backoff
+
+1. **Verification**:
+   - Tests exporter endpoint availability
+   - Validates metrics collection
+   - Displays sample metrics output
+
+1. **Logging**:
+   - Records fix operation in `/var/log/prometheus-pve-exporter-token-fix.log`
+   - Shows recent service logs for verification
+
+### Integration with Monitoring Systems
+
+When using monitoring systems that alert on authentication failures:
+
+```bash
+#!/bin/bash
+# Auto-fix script for monitoring alerts
+
+if systemctl status prometheus-pve-exporter | grep -q "401 Unauthorized"; then
+    echo "Detected authentication error, running fix..."
+    /path/to/fix-token.sh
+    
+    # Notify monitoring system
+    curl -X POST https://monitoring.example.com/api/v1/alerts/resolve \
+        -d '{"alert":"pve_exporter_auth_error","status":"resolved"}'
+fi
+```
+
+### Security Considerations
+
+**Important Security Notes**:
+
+1. **Token Visibility**: The token value is briefly visible in the process list during creation. This is a limitation of the Proxmox CLI tools.
+
+1. **Secure Storage**: Tokens are stored with restricted permissions:
+   - Configuration file: `640` permissions
+   - Owner: `prometheus:prometheus`
+   - Location: `/etc/prometheus/pve.yml`
+
+1. **Backup Files**: The script creates timestamped backups of the configuration before modification.
+
+1. **Audit Trail**: All token operations are logged to `/var/log/prometheus-pve-exporter-token-fix.log`.
+
+### Troubleshooting Token Issues
+
+If the fix-token.sh script fails:
+
+1. **Check Proxmox User**:
+   ```bash
+   pveum user list | grep prometheus
+   ```
+
+1. **Verify Service User**:
+   ```bash
+   id prometheus
+   ```
+
+1. **Inspect Configuration**:
+   ```bash
+   cat /etc/prometheus/pve.yml
+   ```
+
+1. **Review Logs**:
+   ```bash
+   journalctl -xeu prometheus-pve-exporter
+   tail -f /var/log/prometheus-pve-exporter-token-fix.log
+   ```
+
+### Best Practices
+
+1. **Regular Testing**: Test token validity monthly
+1. **Backup Configuration**: Keep backups of working configurations
+1. **Monitor Token Health**: Set up alerts for authentication failures
+1. **Document Changes**: Log all manual token operations
+1. **Automate Recovery**: Integrate fix-token.sh into incident response
 
 ## Security Considerations
 
