@@ -31,6 +31,17 @@ When invoked, you must follow these steps:
 4. **Create or update documentation**:
    - For new docs: Use `Write` to create files in appropriate locations
    - For updates: Use `Edit` or `MultiEdit` for efficient modifications
+   - **For reports** (files in `reports/` directory or with "report" in the name):
+     - Use `Bash` to run `date` command to get current timestamp
+     - Include the timestamp in the report header/metadata section
+     - Format the timestamp in a standardized way, e.g.:
+       ```markdown
+       ---
+       Report Title: <title>
+       Generated on: <output from date command>
+       ---
+       ```
+     - Consider using `date -u` for UTC timestamps or `date "+%Y-%m-%d %H:%M:%S %Z"` for a specific format
    - Ensure proper markdown formatting with appropriate headings
    - Include code examples with syntax highlighting
    - Add diagrams using mermaid syntax when helpful
@@ -55,6 +66,7 @@ When invoked, you must follow these steps:
 - Use consistent markdown formatting throughout all documentation
 - Include a table of contents for documents longer than 3 sections
 - Add timestamps and version information to track changes
+- **For reports**: Always include a timestamp at the beginning using `date` command output
 - Write clear, concise sentences avoiding jargon where possible
 - Include practical examples and use cases
 - Add "Prerequisites" and "Getting Started" sections for guides
