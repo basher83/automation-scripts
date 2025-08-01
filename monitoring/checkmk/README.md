@@ -1,4 +1,6 @@
-# Checkmk useful tips
+# CheckMK Agent Management
+
+This directory contains scripts for installing and uninstalling the CheckMK monitoring agent on Debian/Ubuntu systems.
 
 ## Quick Install
 
@@ -6,13 +8,22 @@ For a quick installation, run this command to download and execute the installat
 
 ```bash
 # Install agent only
-curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/checkmk/install-agent.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/monitoring/checkmk/install-agent.sh | sudo bash
 
 # Install agent with Docker plugin
-curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/checkmk/install-agent.sh | sudo bash -s -- --docker
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/monitoring/checkmk/install-agent.sh | sudo bash -s -- --docker
 ```
 
-## Install Checkmk Agent on Debian/Ubuntu
+## Quick Uninstall
+
+To uninstall the CheckMK agent:
+
+```bash
+# Uninstall agent
+curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/monitoring/checkmk/uninstall-agent.sh | sudo bash
+```
+
+## Installation
 
 ### Automated Installation (Local)
 
@@ -102,3 +113,52 @@ After installation, you'll need to:
 1. Configure firewall rules if needed (port 6556)
 1. Add the host to your CheckMK monitoring server
 1. If using Docker plugin: ensure the CheckMK agent can access Docker (may require adding user to docker group)
+
+## Uninstallation
+
+### Automated Uninstallation (Local)
+
+If you've cloned this repository:
+
+```bash
+# Uninstall the agent
+sudo ./uninstall-agent.sh
+```
+
+The uninstall script will:
+
+- Check for existing CheckMK agent installation
+- Stop all CheckMK services and processes
+- Remove CheckMK packages (check-mk-agent, checkmk-agent, cmk-agent)
+- Clean up configuration files and directories
+- Remove systemd unit files
+- Verify complete removal
+
+### What Gets Removed
+
+The uninstallation script removes:
+
+- CheckMK agent packages
+- Configuration directories:
+  - `/etc/check_mk`
+  - `/etc/cmk-agent`
+- Data directories:
+  - `/var/lib/check_mk_agent`
+  - `/var/lib/cmk-agent`
+- Plugin directories:
+  - `/usr/lib/check_mk_agent`
+- Systemd unit files:
+  - `check-mk-agent.socket`
+  - `check-mk-agent@.service`
+  - `check-mk-agent-async.service`
+  - `cmk-agent-ctl-daemon.service`
+- All CheckMK processes
+
+### Post-Uninstallation
+
+After uninstallation:
+
+1. The host will no longer be monitored by CheckMK
+1. Port 6556 will be freed up
+1. You may need to remove the host from your CheckMK monitoring server
+1. Any custom plugins or local checks will be removed
