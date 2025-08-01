@@ -44,7 +44,7 @@ The scripts demonstrate **good security practices** overall, with proper error h
 
   **Mitigation**: Already handles errors with `2>/dev/null`
 
-### 2. `/checkmk/install-agent.sh`
+### 2. `/monitoring/checkmk/install-agent.sh`
 
 **Security Level: Good**
 

@@ -26,9 +26,11 @@ A collection of production-ready automation scripts for DevOps and system admini
 This repository provides battle-tested automation scripts for common infrastructure and development tasks:
 
 - **Bootstrap Scripts**: Install modern CLI tools (eza, fd, uv, ripgrep)
-- **Monitoring**: CheckMK agent installation and configuration
+- **Monitoring**: CheckMK agent installation, configuration, and removal
 - **Backup Management**: Proxmox Backup Server health checks and status monitoring
 - **Infrastructure**: Proxmox Virtual Environment utilities and exporters
+- **Firewall Management**: NFTables port management utilities
+- **Service Discovery**: Consul integration and Prometheus exporters
 - **Documentation**: Automated documentation maintenance tools
 
 All scripts follow consistent patterns for error handling, security validation, and user interaction.
@@ -49,20 +51,33 @@ automation-scripts/
 ├── bootstrap/                      # Development environment setup
 │   ├── bootstrap.sh               # Install modern CLI tools
 │   └── README.md                  # Detailed bootstrap documentation
-├── checkmk/                       # CheckMK monitoring
-│   ├── install-agent.sh          # Install CheckMK agent
-│   └── README.md                 # CheckMK setup guide
+├── consul/                        # Consul integration tools
+│   └── prometheus/                # Prometheus exporters
+│       ├── prometheus-consul-exporter.sh
+│       └── README.md
 ├── documentation/                 # Documentation utilities
 │   ├── update-trees.sh           # Update ASCII trees in docs
 │   └── README.md                 # Documentation tools guide
+├── monitoring/                    # Monitoring tools
+│   └── checkmk/                  # CheckMK monitoring
+│       ├── install-agent.sh      # Install CheckMK agent
+│       ├── uninstall-agent.sh    # Uninstall CheckMK agent
+│       └── README.md             # CheckMK setup guide
+├── nftables/                      # Firewall management
+│   ├── open-port.sh              # Port management utility
+│   └── README.md
 ├── proxmox-backup-server/         # PBS utilities
-│   └── pbs-backup-health.sh      # Check backup health status
+│   ├── pbs-backup-health.sh      # Check backup health status
+│   └── README.md
 ├── proxmox-virtual-environment/   # PVE utilities
 │   ├── pve-backup-status.sh      # Display backup task status
-│   └── prometheus-pve-exporter/  # Prometheus exporter
-│       ├── install-pve-exporter.sh
-│       └── uninstall-pve-exporter.sh
+│   ├── prometheus-pve-exporter/  # Prometheus exporter
+│   │   ├── install-pve-exporter.sh
+│   │   ├── manage-pve-exporter.sh
+│   │   └── uninstall-pve-exporter.sh
+│   └── README.md
 ├── CLAUDE.md                      # AI assistant guidelines
+├── CODING_STANDARDS.md            # Development standards
 ├── LICENSE                        # MIT License
 └── README.md                      # This file
 ```
@@ -132,12 +147,19 @@ Installs essential modern CLI tools for enhanced productivity:
 EZA_SKIP_GPG_VERIFY=1 UV_INSTALL_SKIP_CONFIRM=1 ./bootstrap/bootstrap.sh
 ```
 
-### CheckMK Agent (`checkmk/install-agent.sh`)
+### CheckMK Agent (`monitoring/checkmk/`)
 
-Installs and configures the CheckMK monitoring agent on Ubuntu/Debian systems:
+Install, manage, and uninstall the CheckMK monitoring agent on Ubuntu/Debian systems:
 
 ```bash
-./checkmk/install-agent.sh
+# Install agent
+./monitoring/checkmk/install-agent.sh
+
+# Install with Docker plugin
+./monitoring/checkmk/install-agent.sh --docker
+
+# Uninstall agent
+./monitoring/checkmk/uninstall-agent.sh
 ```
 
 ### Proxmox Backup Status (`proxmox-virtual-environment/pve-backup-status.sh`)

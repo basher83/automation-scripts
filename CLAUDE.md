@@ -45,7 +45,7 @@ eza -la --tree --level=2
 
 ### Directory Structure
 
-- Each major feature has its own directory (bootstrap/, checkmk/, proxmox-backup-server/, proxmox-virtual-environment/)
+- Each major feature has its own directory (bootstrap/, monitoring/, proxmox-backup-server/, proxmox-virtual-environment/, nftables/, consul/)
 - Scripts are self-contained and can be run independently
 - README.md files in subdirectories provide component-specific documentation
 
@@ -87,9 +87,11 @@ Installs modern CLI tools (eza, fd, uv, ripgrep). Supports both local and remote
 curl -fsSL https://raw.githubusercontent.com/basher83/automation-scripts/main/bootstrap/bootstrap.sh | bash
 ```
 
-### checkmk/install-checkmk-agent.sh
+### monitoring/checkmk/
 
-Installs CheckMK monitoring agent on Ubuntu/Debian systems with proper validation.
+Contains scripts for CheckMK agent management:
+- `install-agent.sh` - Installs CheckMK monitoring agent on Ubuntu/Debian systems with proper validation
+- `uninstall-agent.sh` - Cleanly removes CheckMK agent and all associated files
 
 ### proxmox-backup-server/check-host-backup-health.sh
 
