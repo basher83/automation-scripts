@@ -57,6 +57,27 @@ check_root() {
     fi
 }
 
+# Check for required commands
+check_requirements() {
+    local missing_cmds=()
+    
+    # Check for curl (required for testing)
+    if ! command -v curl &>/dev/null; then
+        missing_cmds+=("curl")
+    fi
+    
+    # Check for pveum (required for token management)
+    if ! command -v pveum &>/dev/null; then
+        missing_cmds+=("pveum (Proxmox VE)")
+    fi
+    
+    if [[ ${#missing_cmds[@]} -gt 0 ]]; then
+        log_error "Missing required commands: ${missing_cmds[*]}"
+        log_error "Please install the missing dependencies"
+        exit 1
+    fi
+}
+
 # Function to create token securely
 create_token_securely() {
     local user="$1"
@@ -69,7 +90,7 @@ create_token_securely() {
     
     if pveum user token add "$user" "$token_name" --privsep "$privsep_value" > "$temp_file" 2>&1; then
         local token_value
-        token_value=$(grep "│ value" "$temp_file" | awk -F'│' '{print $3}' | xargs)
+        token_value=$(grep "│ value" "$temp_file" | grep -v "│ key" | awk -F'│' '{print $3}' | xargs)
         shred -u "$temp_file" 2>/dev/null || rm -f "$temp_file"
         
         if [[ -n "$token_value" ]]; then
@@ -97,7 +118,13 @@ show_status() {
     if systemctl is-active --quiet $SERVICE_NAME; then
         echo -e "  ${GREEN}● Service is running${NC}"
         echo "  PID: $(systemctl show -p MainPID --value $SERVICE_NAME)"
-        echo "  Memory: $(systemctl show -p MemoryCurrent --value $SERVICE_NAME | numfmt --to=iec-i --suffix=B)"
+        
+        # Show memory if numfmt is available
+        local mem_value
+        mem_value=$(systemctl show -p MemoryCurrent --value $SERVICE_NAME)
+        if [[ -n "$mem_value" ]] && [[ "$mem_value" != "[not set]" ]] && command -v numfmt &>/dev/null; then
+            echo "  Memory: $(echo "$mem_value" | numfmt --to=iec-i --suffix=B 2>/dev/null || echo "$mem_value bytes")"
+        fi
     else
         echo -e "  ${RED}● Service is not running${NC}"
     fi
@@ -135,11 +162,11 @@ show_status() {
     
     # Test endpoint
     echo "Endpoint Test:"
-    if curl -s -f -o /dev/null "http://localhost:9221/"; then
+    if curl -s -f -o /dev/null --connect-timeout 5 --max-time 10 "http://localhost:9221/"; then
         echo -e "  ${GREEN}✓ Base endpoint responding${NC}"
         
         # Test metrics
-        if curl -s -f "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
+        if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
             echo -e "  ${GREEN}✓ Metrics collection working${NC}"
         else
             echo -e "  ${RED}✗ Metrics collection failing${NC}"
@@ -156,6 +183,12 @@ recreate_token() {
     check_root
     
     local privsep="${1:-0}"
+    
+    # Validate privsep value
+    if [[ ! "$privsep" =~ ^[01]$ ]]; then
+        log_error "Invalid privilege separation value: $privsep (must be 0 or 1)"
+        return 1
+    fi
     
     log_info "Recreating token for $USERNAME"
     
@@ -189,8 +222,8 @@ recreate_token() {
         # Backup current config
         cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
         
-        # Update token value in config
-        sed -i "s/token_value:.*/token_value: ${token_value}/" "$CONFIG_FILE"
+        # Update token value in config (use | as delimiter to avoid issues with / in token)
+        sed -i "s|token_value:.*|token_value: ${token_value}|" "$CONFIG_FILE"
     else
         log_error "Config file not found: $CONFIG_FILE"
         return 1
@@ -206,7 +239,7 @@ recreate_token() {
         log_info "Service restarted successfully"
         
         # Test metrics
-        if curl -s -f "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
+        if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
             log_info "Token recreation successful! Metrics are working."
         else
             log_warn "Service is running but metrics may have issues"
@@ -227,7 +260,7 @@ test_exporter() {
     
     # Test base endpoint
     log_info "Testing base endpoint..."
-    if curl -s -f "http://localhost:9221/" | head -5; then
+    if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/" | head -5; then
         echo -e "\n${GREEN}✓ Base endpoint OK${NC}\n"
     else
         echo -e "\n${RED}✗ Base endpoint failed${NC}\n"
@@ -237,7 +270,7 @@ test_exporter() {
     # Test metrics endpoint
     log_info "Testing metrics endpoint..."
     local metrics_output
-    metrics_output=$(curl -s "http://localhost:9221/pve?target=localhost" 2>&1)
+    metrics_output=$(curl -s --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" 2>&1)
     
     if echo "$metrics_output" | grep -q "pve_up"; then
         echo -e "${GREEN}✓ Metrics collection working${NC}"
@@ -312,12 +345,15 @@ usage() {
 # Main command handling
 case "${1:-help}" in
     status)
+        check_requirements
         show_status
         ;;
     recreate-token)
+        check_requirements
         recreate_token "${2:-0}"
         ;;
     test)
+        check_requirements
         test_exporter
         ;;
     logs)
