@@ -10,8 +10,11 @@ This document establishes coding standards and best practices for all shell scri
 1. [Color Output Functions](#color-output-functions)
 1. [Error Handling and Cleanup](#error-handling-and-cleanup)
 1. [Interactive vs Non-Interactive Mode](#interactive-vs-non-interactive-mode)
+1. [Shell Globbing and File Patterns](#shell-globbing-and-file-patterns)
+1. [Process Management and Safe Termination](#process-management-and-safe-termination)
 1. [Temporary File Usage](#temporary-file-usage)
 1. [Security Practices](#security-practices)
+1. [Complete Cleanup Patterns](#complete-cleanup-patterns)
 1. [Idempotency Requirements](#idempotency-requirements)
 1. [Documentation Requirements](#documentation-requirements)
 
@@ -241,41 +244,133 @@ ansible all -m shell -a "systemctl status service-name"
 
 ## Logging Standards
 
-Scripts that perform installations or significant system changes must save logs to `/var/log/` with descriptive names.
+Scripts that perform installations or significant system changes must save comprehensive logs to `/var/log/` with timestamped filenames to prevent overwriting.
 
 ### Standard Logging Pattern
 
-The following pattern from `install-pve-exporter.sh` serves as our standard:
-
 ```bash
-# Save installation log
-LOG_FILE="/var/log/${SERVICE_NAME}-install.log"
-echo "Installation completed at $(date)" >> $LOG_FILE
-echo "Token: ${USERNAME}!${TOKEN_NAME}" >> $LOG_FILE
-chown $USER:$USER $LOG_FILE
-chmod 640 $LOG_FILE
+# Define log file with timestamp to prevent overwriting
+readonly LOG_FILE="/var/log/${SERVICE_NAME}-${ACTION}-$(date +%Y%m%d_%H%M%S).log"
 
-log_info "Installation log saved to: $LOG_FILE"
+# Initialize log file
+echo "${ACTION^} started at $(date)" > "$LOG_FILE"
+chmod 640 "$LOG_FILE"
+
+# Notify user about log location at script start
+print_info "Log file: $LOG_FILE"
+
+# Combined console and file logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"
+}
+
+# Log debug information
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.0" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >> "$LOG_FILE"
 ```
 
 ### Key Requirements
 
 1. **Log location**: Always use `/var/log/` for system-wide scripts
-1. **Descriptive names**: Use format `${SERVICE_NAME}-${ACTION}.log`
-1. **Timestamps**: Include date/time for all log entries
-1. **Permissions**: Set appropriate ownership and restrictive permissions (640)
-1. **User notification**: Inform the user where logs are saved
+1. **Timestamped filenames**: Use format `${SERVICE_NAME}-${ACTION}-$(date +%Y%m%d_%H%M%S).log`
+1. **Dual logging**: Log to both console and file simultaneously
+1. **Log levels**: Use INFO, WARN, ERROR, and DEBUG appropriately
+1. **System context**: Log script version, user, system info, and mode at start
+1. **Command output**: Use `tee -a "$LOG_FILE"` to capture command outputs
+1. **Permissions**: Set restrictive permissions (640) immediately after creation
+1. **User notification**: Show log location at start, end, and on error
+
+### Logging Levels
+
+```bash
+# INFO - Normal operations and milestones
+log_info "Starting service installation"
+log_info "Service installed successfully"
+
+# WARN - Non-critical issues that don't stop execution
+log_warn "Service already exists, will upgrade"
+log_warn "Optional dependency not found, skipping"
+
+# ERROR - Critical failures
+log_error "Installation failed: missing required dependency"
+log_error "Unable to start service"
+
+# DEBUG - Detailed diagnostic information (only to file)
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Package details: $(dpkg -l | grep 'service')" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Systemd units: $(systemctl list-units --all | grep 'service')" >> "$LOG_FILE"
+```
+
+### User Notification Patterns
+
+```bash
+# At script start
+echo -e "${BOLD}${CYAN}Service Installation Script${NC}"
+echo -e "${CYAN}===================================${NC}"
+print_info "Log file: $LOG_FILE"
+echo ""
+
+# On successful completion
+echo ""
+echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}✓ Installation completed successfully!${NC}"
+echo -e "${GREEN}✓ Log saved to: ${BOLD}$LOG_FILE${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
+
+# On error (in cleanup trap)
+cleanup() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        log_error "Script failed with exit code: $exit_code"
+        print_error "Script failed! Check the log for details: $LOG_FILE"
+    fi
+}
+trap cleanup EXIT
+```
+
+### Capturing Command Output
+
+```bash
+# Log command output while showing progress
+if systemctl stop "$service" 2>&1 | tee -a "$LOG_FILE"; then
+    log_info "Successfully stopped $service"
+else
+    log_warn "Failed to stop $service (may already be stopped)"
+fi
+
+# Log detailed output only to file
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Service status:" >> "$LOG_FILE"
+systemctl status "$service" >> "$LOG_FILE" 2>&1
+
+# Use process substitution for complex pipelines
+dpkg -l | grep "package" | tee >(cat >> "$LOG_FILE") | head -5
+```
 
 ### Examples
 
 ```bash
-# For installation scripts
-LOG_FILE="/var/log/checkmk-agent-install.log"
+# Installation scripts
+LOG_FILE="/var/log/checkmk-agent-install-$(date +%Y%m%d_%H%M%S).log"
 
-# For backup scripts
-LOG_FILE="/var/log/pve-backup-$(date +%Y%m%d).log"
+# Uninstallation scripts
+LOG_FILE="/var/log/checkmk-agent-uninstall-$(date +%Y%m%d_%H%M%S).log"
 
-# For update scripts
+# Backup scripts
+LOG_FILE="/var/log/pve-backup-$(date +%Y%m%d_%H%M%S).log"
+
+# Update scripts
 LOG_FILE="/var/log/${SERVICE_NAME}-update-$(date +%Y%m%d_%H%M%S).log"
 ```
 
@@ -338,22 +433,28 @@ Proper error handling ensures scripts fail gracefully and clean up resources.
 ### Trap Pattern
 
 ```bash
-# Basic error trap
+# Basic error trap with log notification
 trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 
 # Cleanup trap for temporary files
 temp_file=$(mktemp)
 trap 'rm -f "$temp_file"' EXIT
 
-# Combined cleanup and error handling
+# Combined cleanup and error handling with log notification
 cleanup() {
     local exit_code=$?
     [[ -f "$temp_file" ]] && rm -f "$temp_file"
     [[ -d "$temp_dir" ]] && rm -rf "$temp_dir"
     if [[ $exit_code -ne 0 ]]; then
         log_error "Script failed with exit code: $exit_code"
+        print_error "Script failed! Check the log for details: $LOG_FILE"
     fi
 }
+trap cleanup EXIT
+
+# Advanced pattern with both ERR and EXIT traps
+set -euo pipefail
+trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 trap cleanup EXIT
 ```
 
@@ -417,6 +518,292 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+```
+
+## Shell Globbing and File Patterns
+
+Proper handling of shell glob patterns prevents errors and improves script reliability.
+
+### Glob Expansion Patterns
+
+```bash
+# INCORRECT - This will cause syntax errors
+for file in /path/to/files/* 2>/dev/null; do
+    # This doesn't work - can't redirect glob expansion
+done
+
+# CORRECT - Use nullglob to handle no matches gracefully
+shopt -s nullglob  # Globs expand to nothing if no matches
+for file in /path/to/files/*; do
+    if [[ -e "$file" ]]; then
+        # Process file
+    fi
+done
+shopt -u nullglob  # Reset to default behavior
+```
+
+### Safe File Search Patterns
+
+```bash
+# Fast targeted search instead of slow filesystem-wide find
+search_for_files() {
+    local patterns=(
+        "/etc/service/*"
+        "/usr/bin/service*"
+        "/var/lib/service/*"
+    )
+    
+    local found_files=""
+    for pattern in "${patterns[@]}"; do
+        shopt -s nullglob
+        for file in $pattern; do
+            if [[ -e "$file" ]]; then
+                found_files="${found_files}${file}\n"
+            fi
+        done
+        shopt -u nullglob
+    done
+    
+    if [[ -n "$found_files" ]]; then
+        echo -e "$found_files"
+    fi
+}
+
+# Filter false positives when searching
+shopt -s nullglob
+for file in /usr/bin/*mk*; do
+    # Filter out unrelated matches
+    if [[ ! "$file" =~ ipcmk ]] && [[ ! "$file" =~ somethingelse ]]; then
+        echo "Found: $file"
+    fi
+done
+shopt -u nullglob
+```
+
+### Performance Optimization
+
+```bash
+# SLOW - Searches entire filesystem
+find /usr /etc /var -name "*pattern*" 2>/dev/null
+
+# FAST - Targeted search with specific paths
+local check_paths=(
+    "/etc/pattern*"
+    "/usr/bin/pattern*"
+    "/usr/local/bin/pattern*"
+    "/var/lib/pattern*"
+)
+
+for path in "${check_paths[@]}"; do
+    shopt -s nullglob
+    for file in $path; do
+        # Process matches
+    done
+    shopt -u nullglob
+done
+```
+
+### Glob Options
+
+```bash
+# Common shell options for glob handling
+shopt -s nullglob    # Patterns that match nothing expand to nothing
+shopt -s failglob    # Patterns that match nothing cause an error
+shopt -s dotglob     # Include hidden files in matches
+shopt -s globstar    # Enable ** for recursive matching
+
+# Always reset options after use
+shopt -u nullglob
+```
+
+## Process Management and Safe Termination
+
+Scripts that manage processes must ensure they don't accidentally terminate themselves or critical system processes.
+
+### Avoiding Self-Termination
+
+When killing processes by pattern, always exclude the current script:
+
+```bash
+# INCORRECT - This can kill the script itself
+pkill -f "service.*pattern"  # Dangerous if script name matches!
+
+# CORRECT - Exclude current script's PID
+local my_pid=$$
+local target_pids=$(pgrep -f "service.*pattern" | grep -v "^${my_pid}$" || true)
+
+if [[ -n "$target_pids" ]]; then
+    echo "$target_pids" | while read -r pid; do
+        # Double-check we're not killing critical processes
+        local cmd=$(ps -p "$pid" -o comm= 2>/dev/null || true)
+        if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ uninstall ]] && [[ ! "$cmd" =~ upgrade ]]; then
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
+    done
+fi
+```
+
+### Safe Process Termination Pattern
+
+```bash
+kill_service_processes() {
+    local service_name="$1"
+    local my_pid=$$
+    
+    # Find processes, excluding our script
+    local pids=$(pgrep -f "$service_name" | grep -v "^${my_pid}$" || true)
+    
+    if [[ -z "$pids" ]]; then
+        log_info "No $service_name processes found"
+        return 0
+    fi
+    
+    log_info "Stopping $service_name processes..."
+    
+    # Try graceful termination first
+    for pid in $pids; do
+        if kill -TERM "$pid" 2>/dev/null; then
+            log_info "Sent TERM signal to PID $pid"
+        fi
+    done
+    
+    # Wait for processes to exit
+    sleep 2
+    
+    # Force kill if still running
+    pids=$(pgrep -f "$service_name" | grep -v "^${my_pid}$" || true)
+    if [[ -n "$pids" ]]; then
+        for pid in $pids; do
+            if kill -KILL "$pid" 2>/dev/null; then
+                log_warn "Force killed PID $pid"
+            fi
+        done
+    fi
+    
+    log_info "$service_name processes terminated"
+}
+```
+
+### Process Discovery Best Practices
+
+```bash
+# Use specific patterns to avoid false positives
+# BAD: Too broad
+pgrep -f "mk"  # Matches too many things
+
+# GOOD: More specific
+pgrep -f "check_mk_agent"  # Specific binary name
+pgrep -f "cmk-agent-ctl"   # Exact service name
+
+# When searching for multiple patterns
+local check_pids=$(pgrep -f "check_mk_agent" || true)
+local cmk_pids=$(pgrep -f "cmk-agent-ctl" || true)
+local all_pids="$check_pids $cmk_pids"
+```
+
+### PID Validation
+
+Always validate PIDs before operations to avoid errors with stale or invalid PIDs:
+
+```bash
+# Validate PIDs before displaying or killing
+validate_and_show_processes() {
+    local pids="$1"
+    local valid_pids=""
+    
+    # Filter out invalid PIDs
+    for pid in $pids; do
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            valid_pids="$valid_pids $pid"
+        fi
+    done
+    
+    if [[ -n "$valid_pids" ]]; then
+        for pid in $valid_pids; do
+            # Get process info without headers
+            local info=$(ps -p "$pid" -o pid,comm,args --no-headers 2>/dev/null || true)
+            if [[ -n "$info" ]]; then
+                echo "  $info"
+            fi
+        done
+    fi
+}
+
+# Check if PID is still valid
+is_pid_valid() {
+    local pid="$1"
+    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+# Safe PID iteration with validation
+for pid in $pids; do
+    if is_pid_valid "$pid"; then
+        # Process is valid, perform operations
+        kill -TERM "$pid" 2>/dev/null || true
+    fi
+done
+```
+
+### Systemd Service Management
+
+For systemd services, prefer using systemctl over process killing:
+
+```bash
+# Stop services properly
+stop_systemd_services() {
+    local services=(
+        "service-name.service"
+        "service-name.socket"
+        "service-name-helper.service"
+    )
+    
+    for service in "${services[@]}"; do
+        if systemctl is-active --quiet "$service" 2>/dev/null; then
+            log_info "Stopping $service..."
+            systemctl stop "$service" 2>/dev/null || true
+        fi
+        
+        if systemctl is-enabled --quiet "$service" 2>/dev/null; then
+            log_info "Disabling $service..."
+            systemctl disable "$service" 2>/dev/null || true
+        fi
+    done
+    
+    # Reload systemd after changes
+    systemctl daemon-reload
+}
+```
+
+### Signal Handling
+
+```bash
+# Common signals and their meanings
+# TERM (15) - Graceful termination request
+# KILL (9)  - Force termination (cannot be caught)
+# HUP (1)   - Reload configuration
+# INT (2)   - Interrupt (Ctrl+C)
+
+# Send signals safely with timeout
+terminate_with_timeout() {
+    local pid="$1"
+    local timeout="${2:-5}"
+    
+    # Send TERM and wait
+    if kill -TERM "$pid" 2>/dev/null; then
+        local count=0
+        while kill -0 "$pid" 2>/dev/null && [[ $count -lt $timeout ]]; do
+            sleep 1
+            ((count++))
+        done
+        
+        # Force kill if still running
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -KILL "$pid" 2>/dev/null
+            return 1  # Had to force kill
+        fi
+    fi
+    return 0  # Clean termination
+}
 ```
 
 ## Temporary File Usage
@@ -501,6 +888,111 @@ if [[ "$path" =~ \.\. ]]; then
     log_error "Path traversal detected"
     exit 1
 fi
+```
+
+## Complete Cleanup Patterns
+
+When uninstalling services or cleaning up, ensure all components are removed:
+
+### File and Directory Cleanup
+
+```bash
+# Define comprehensive cleanup lists
+cleanup_files() {
+    local cleanup_items=(
+        # Configuration directories
+        "/etc/service-name"
+        "/etc/service-name.d"
+        
+        # Data directories
+        "/var/lib/service-name"
+        "/var/cache/service-name"
+        "/var/log/service-name"
+        
+        # Binary files
+        "/usr/bin/service-binary"
+        "/usr/sbin/service-daemon"
+        "/usr/local/bin/service-helper"
+        
+        # Systemd files
+        "/lib/systemd/system/service.service"
+        "/etc/systemd/system/service.service"
+    )
+    
+    for item in "${cleanup_items[@]}"; do
+        if [[ -e "$item" ]]; then
+            log_info "Removing: $item"
+            if rm -rf "$item" 2>&1 | tee -a "$LOG_FILE"; then
+                log_info "Successfully removed $item"
+            else
+                log_warn "Failed to remove $item"
+            fi
+        fi
+    done
+}
+```
+
+### Systemd Cleanup
+
+```bash
+# Remove all systemd traces
+cleanup_systemd() {
+    # Remove symlinks from all target directories
+    local symlink_patterns=(
+        "/etc/systemd/system/*.wants/service*"
+        "/lib/systemd/system/*.wants/service*"
+        "/usr/lib/systemd/system/*.wants/service*"
+    )
+    
+    for pattern in "${symlink_patterns[@]}"; do
+        shopt -s nullglob
+        for symlink in $pattern; do
+            if [[ -L "$symlink" ]]; then
+                log_info "Removing systemd symlink: $symlink"
+                rm -f "$symlink"
+            fi
+        done
+        shopt -u nullglob
+    done
+    
+    # Reload daemon after cleanup
+    systemctl daemon-reload
+}
+```
+
+### Verification After Cleanup
+
+```bash
+# Verify complete removal
+verify_cleanup() {
+    local issues=0
+    
+    # Check for remaining files
+    local check_paths=(
+        "/etc/service*"
+        "/usr/bin/service*"
+        "/var/lib/service*"
+    )
+    
+    local remaining=""
+    for pattern in "${check_paths[@]}"; do
+        shopt -s nullglob
+        for file in $pattern; do
+            if [[ -e "$file" ]]; then
+                remaining="${remaining}${file}\n"
+            fi
+        done
+        shopt -u nullglob
+    done
+    
+    if [[ -n "$remaining" ]]; then
+        log_warn "Found remaining files:"
+        echo -e "$remaining"
+        issues=$((issues + 1))
+    fi
+    
+    return $issues
+}
 ```
 
 ## Idempotency Requirements
