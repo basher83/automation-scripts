@@ -68,8 +68,8 @@ No changes needed - this script works with any network configuration.
 
 ### Parent Nodes
 
-- Holly: 192.168.11.2:19999
-- Lloyd: 192.168.11.3:19999
+- Lloyd: 192.168.11.2:19999
+- Holly: 192.168.11.3:19999
 - Mable: 192.168.11.4:19999
 
 ### Child Nodes

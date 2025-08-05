@@ -8,15 +8,21 @@ Our Netdata setup uses a hierarchical parent-child architecture with the followi
 
 ### Parent Nodes (Proxmox Hosts)
 
-- **holly** - Primary parent accepting child streams
+- **lloyd** - Primary parent accepting child streams
+  - GUID: e6635edf-68f9-4cfa-8aa9-338d649e4e72
   - Management: 192.168.10.2 (2.5G)
   - Application: 192.168.11.2 (10G) - Used for Netdata streaming
-- **lloyd** - Secondary parent with mutual replication
+- **holly** - Secondary parent with mutual replication
+  - GUID: fe51dda8-238b-4396-983b-58c08dffe196
   - Management: 192.168.10.3 (2.5G)
   - Application: 192.168.11.3 (10G) - Used for Netdata streaming
 - **mable** - Tertiary parent accepting child streams
+  - GUID: 80cf055f-4961-4376-bdbf-bbee6d77959c
   - Management: 192.168.10.4 (2.5G)
   - Application: 192.168.11.4 (10G) - Used for Netdata streaming
+- **pve1** - Proxmox Host
+  - GUID: 9e2a0012-9cd3-42d7-b82a-afa595b3e44c
+  - Management/Application: 192.168.30.50 (2.5G)
 
 ### Child Nodes
 
@@ -24,7 +30,8 @@ Our Netdata setup uses a hierarchical parent-child architecture with the followi
 
 All Nomad nodes have dual interfaces - streaming happens over 10G network:
 
-- **nomad-server-1** 
+- **nomad-server-1**
+  - GUID: 524f3f9f-0140-427d-922d-bad37427a825
   - Management: 192.168.10.11 (2.5G)
   - Application: 192.168.11.11 (10G) - Used for Netdata streaming
 - **nomad-server-2**
@@ -34,6 +41,7 @@ All Nomad nodes have dual interfaces - streaming happens over 10G network:
   - Management: 192.168.10.13 (2.5G)
   - Application: 192.168.11.13 (10G) - Used for Netdata streaming
 - **nomad-client-1**
+  - GUID: 3fd08a42-2a50-46a1-9634-f69bd9b16ab1
   - Management: 192.168.10.20 (2.5G)
   - Application: 192.168.11.20 (10G) - Used for Netdata streaming
 - **nomad-client-2**
@@ -60,13 +68,13 @@ Each parent node requires two main configuration files:
 1. **stream.conf** - Defines streaming relationships
 2. **netdata.conf** - Configures data retention and storage
 
-#### Holly (Primary Parent)
+#### Lloyd (Primary Parent) 192.168.11.2
 
 ```ini
 # /etc/netdata/stream.conf
 [stream]
     enabled = no  # Not streaming to another parent (will be enabled for replication)
-    
+
 [nomad-cluster-api-key]
     enabled = yes
     # Accept connections from Nomad nodes on 10G network
@@ -74,7 +82,7 @@ Each parent node requires two main configuration files:
     db = dbengine
     health enabled = yes
     postpone alarms on connect = 60s
-    
+
 [parent-replication-key]
     enabled = yes
     # Accept replication from other parents on 10G network
@@ -155,7 +163,7 @@ To ensure Netdata uses the 10G network, configure the bind address in `netdata.c
 # On parent nodes - bind to 10G interface
 [web]
     bind to = 192.168.11.2:19999  # For holly (adjust IP for each host)
-    
+
 # Or bind to all interfaces but use firewall rules
 [web]
     bind to = *:19999
@@ -164,6 +172,8 @@ To ensure Netdata uses the 10G network, configure the bind address in `netdata.c
 ### Firewall Rules
 
 Allow Netdata traffic on the 10G network:
+
+[TODO]: These devices use nftables not ufw/iptables.
 
 ```bash
 # UFW example - allow from 10G network
