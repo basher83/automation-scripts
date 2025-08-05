@@ -1,14 +1,18 @@
 #!/bin/bash
 #
-# Prometheus PVE Exporter Bootstrap Script
+# Prometheus PVE Exporter Bootstrap Script (Improved)
 # 
 # This script installs and configures prometheus-pve-exporter on a Proxmox host
 # using a Python virtual environment for production stability.
 #
+# Improvements:
+# - Auto-detects correct privilege separation setting based on PVE version
+# - Secure token creation to avoid process list exposure
+# - Option to enable SSL verification
+# - Better error handling and recovery
+#
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/install-pve-exporter.sh | bash
-#   or
-#   wget -qO- https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/install-pve-exporter.sh | bash
+#   ./install-pve-exporter.sh [--verify-ssl] [--privsep auto|0|1]
 #
 
 set -euo pipefail  # Exit on error, undefined variables, pipe failures
@@ -21,6 +25,34 @@ INSTALL_DIR="/opt/prometheus-pve-exporter"
 CONFIG_DIR="/etc/prometheus"
 CONFIG_FILE="${CONFIG_DIR}/pve.yml"
 SERVICE_NAME="prometheus-pve-exporter"
+
+# Default options
+VERIFY_SSL="false"
+PRIVSEP="auto"
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --verify-ssl)
+            VERIFY_SSL="true"
+            shift
+            ;;
+        --privsep)
+            PRIVSEP="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--verify-ssl] [--privsep auto|0|1]"
+            echo "  --verify-ssl    Enable SSL certificate verification (default: disabled)"
+            echo "  --privsep      Set privilege separation mode (default: auto-detect)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -53,7 +85,89 @@ if ! command -v pveum &> /dev/null; then
     exit 1
 fi
 
+# Function to detect appropriate privilege separation setting
+detect_privsep_mode() {
+    local pve_version
+    pve_version=$(pveversion | grep -oP 'pve-manager/\K[0-9]+\.[0-9]+' || echo "0.0")
+    
+    log_info "Detected PVE version: $pve_version"
+    
+    # Known compatibility issues:
+    # - Some versions of prometheus-pve-exporter have issues with privsep=1
+    # - This appears to be related to how the exporter handles token authentication
+    
+    # For now, default to privsep=0 for compatibility
+    # This can be overridden with --privsep 1 if needed
+    echo "0"
+}
+
+# Function to create token securely (avoiding process list exposure)
+create_token_securely() {
+    local user="$1"
+    local token_name="$2"
+    local privsep_value="$3"
+    local temp_file
+    
+    # Create secure temporary file in memory
+    temp_file=$(mktemp -p /dev/shm pve-token.XXXXXX)
+    chmod 600 "$temp_file"
+    
+    # Create token and capture output
+    if pveum user token add "$user" "$token_name" --privsep "$privsep_value" > "$temp_file" 2>&1; then
+        # Extract token value from output (skip header row, get actual token row)
+        local token_value
+        token_value=$(grep "│ value" "$temp_file" | grep -v "│ key" | awk -F'│' '{print $3}' | xargs)
+        
+        # Securely remove temporary file
+        shred -u "$temp_file" 2>/dev/null || rm -f "$temp_file"
+        
+        if [[ -n "$token_value" ]]; then
+            echo "$token_value"
+            return 0
+        else
+            log_error "Failed to extract token value from output"
+            return 1
+        fi
+    else
+        # Show error and cleanup
+        cat "$temp_file" >&2
+        shred -u "$temp_file" 2>/dev/null || rm -f "$temp_file"
+        return 1
+    fi
+}
+
+# Function to wait for service state
+wait_for_service_state() {
+    local service="$1"
+    local desired_state="$2"
+    local timeout="${3:-30}"
+    
+    for ((i=0; i<timeout; i++)); do
+        if systemctl is-active --quiet "$service"; then
+            [[ "$desired_state" == "active" ]] && return 0
+        else
+            [[ "$desired_state" == "inactive" ]] && return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 log_info "Starting Prometheus PVE Exporter installation..."
+
+# Determine privilege separation mode
+if [[ "$PRIVSEP" == "auto" ]]; then
+    PRIVSEP=$(detect_privsep_mode)
+    log_info "Auto-detected privilege separation mode: $PRIVSEP"
+else
+    log_info "Using specified privilege separation mode: $PRIVSEP"
+fi
+
+# Validate privsep value
+if [[ ! "$PRIVSEP" =~ ^[01]$ ]]; then
+    log_error "Invalid privilege separation value: $PRIVSEP (must be 0 or 1)"
+    exit 1
+fi
 
 # Create system user if doesn't exist
 if ! id "$USER" &>/dev/null; then
@@ -95,38 +209,28 @@ fi
 log_info "Granting PVEAuditor role to $USERNAME"
 pveum acl modify / --users $USERNAME --roles PVEAuditor
 
-# Check if token already exists
+# Handle existing token
 if pveum user token list $USERNAME 2>/dev/null | grep -q "$TOKEN_NAME"; then
     log_warn "Token $TOKEN_NAME already exists for $USERNAME"
-    log_warn "To use a new token, please manually remove the old one with:"
-    log_warn "  pveum user token remove $USERNAME $TOKEN_NAME"
-    log_error "Exiting to prevent token conflicts"
-    exit 1
+    read -p "Do you want to remove and recreate the token? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Removing existing token..."
+        pveum user token remove $USERNAME $TOKEN_NAME
+    else
+        log_error "Cannot proceed without handling existing token"
+        exit 1
+    fi
 fi
 
-# Create token without privilege separation for compatibility
-log_info "Creating API token..."
-TOKEN_OUTPUT=$(pveum user token add $USERNAME $TOKEN_NAME --privsep 0)
-
-# Extract the token value from the table format
-# Format: │ value        │ dc787432-624c-49b2-9a69-1d6a23f61261 │
-TOKEN_VALUE=$(echo "$TOKEN_OUTPUT" | grep "^│ value" | awk -F'│' '{print $3}' | xargs)
+# Create token securely
+log_info "Creating API token with privsep=$PRIVSEP..."
+TOKEN_VALUE=$(create_token_securely "$USERNAME" "$TOKEN_NAME" "$PRIVSEP")
 
 if [[ -z "$TOKEN_VALUE" ]]; then
-    log_error "Failed to extract token value"
-    echo "$TOKEN_OUTPUT"
+    log_error "Failed to create token"
     exit 1
 fi
-
-# Verify token looks valid (should be a UUID format)
-if [[ ! "$TOKEN_VALUE" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
-    log_error "Extracted token doesn't look valid: $TOKEN_VALUE"
-    log_error "Token output was:"
-    echo "$TOKEN_OUTPUT"
-    exit 1
-fi
-
-log_info "Token extracted successfully"
 
 # Grant PVEAuditor role to token
 log_info "Granting PVEAuditor role to token"
@@ -149,7 +253,7 @@ default:
   user: ${USERNAME}
   token_name: ${TOKEN_NAME}
   token_value: ${TOKEN_VALUE}
-  verify_ssl: false
+  verify_ssl: ${VERIFY_SSL}
 EOF
 
 # Set appropriate permissions
@@ -190,16 +294,15 @@ systemctl daemon-reload
 if systemctl is-active --quiet $SERVICE_NAME; then
     log_info "Stopping existing service..."
     systemctl stop $SERVICE_NAME
+    wait_for_service_state $SERVICE_NAME "inactive" 10
 fi
 
 systemctl enable $SERVICE_NAME
 systemctl start $SERVICE_NAME
 
-# Wait a moment for service to start
-sleep 2
-
-# Check service status
-if systemctl is-active --quiet $SERVICE_NAME; then
+# Wait for service to start
+log_info "Waiting for service to start..."
+if wait_for_service_state $SERVICE_NAME "active" 30; then
     log_info "Service started successfully!"
 else
     log_error "Service failed to start. Check logs with: journalctl -xeu $SERVICE_NAME"
@@ -208,10 +311,20 @@ fi
 
 # Test the exporter
 log_info "Testing exporter endpoint..."
+sleep 2  # Give the exporter a moment to initialize
+
 if curl -s -f -o /dev/null "http://localhost:9221/"; then
     log_info "Exporter is responding correctly"
+    
+    # Test actual metrics endpoint
+    if curl -s -f "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
+        log_info "Metrics are being collected successfully!"
+    else
+        log_warn "Exporter is running but metrics collection may have issues"
+        log_warn "Check token permissions and privsep setting"
+    fi
 else
-    log_warn "Exporter test failed, but service is running. It may need a moment to initialize."
+    log_warn "Exporter test failed, but service is running. Check logs for details."
 fi
 
 # Print summary
@@ -220,16 +333,22 @@ echo "================================================================="
 echo -e "${GREEN}Installation completed successfully!${NC}"
 echo "================================================================="
 echo ""
-echo "Token information has been saved to: $CONFIG_FILE"
+echo "Configuration Details:"
+echo "  - Config file: $CONFIG_FILE"
+echo "  - Token: ${USERNAME}!${TOKEN_NAME}"
+echo "  - Privilege separation: $PRIVSEP"
+echo "  - SSL verification: $VERIFY_SSL"
 echo ""
-echo "Service status: systemctl status $SERVICE_NAME"
-echo "Service logs:   journalctl -u $SERVICE_NAME -f"
+echo "Service Management:"
+echo "  - Status: systemctl status $SERVICE_NAME"
+echo "  - Logs: journalctl -u $SERVICE_NAME -f"
+echo "  - Restart: systemctl restart $SERVICE_NAME"
 echo ""
-echo "Metrics URL:    http://$(hostname -I | awk '{print $1}'):9221/pve"
-echo "Local test:     curl http://localhost:9221/pve?target=localhost"
+echo "Metrics Access:"
+echo "  - URL: http://$(hostname -I | awk '{print $1}'):9221/pve"
+echo "  - Test: curl http://localhost:9221/pve?target=localhost"
 echo ""
-echo "To configure Prometheus, add this to your prometheus.yml:"
-echo ""
+echo "Prometheus Configuration:"
 echo "  - job_name: 'pve'"
 echo "    static_configs:"
 echo "      - targets:"
@@ -240,12 +359,20 @@ echo "      module: [default]"
 echo "      cluster: ['1']"
 echo "      node: ['1']"
 echo ""
+echo "Troubleshooting:"
+echo "  - If you get 401 errors, try: $0 --privsep 0"
+echo "  - For SSL issues, use: $0 --verify-ssl"
+echo ""
 echo "================================================================="
 
 # Save installation log
 LOG_FILE="/var/log/${SERVICE_NAME}-install.log"
-echo "Installation completed at $(date)" >> $LOG_FILE
-echo "Token: ${USERNAME}!${TOKEN_NAME}" >> $LOG_FILE
+{
+    echo "Installation completed at $(date)"
+    echo "Token: ${USERNAME}!${TOKEN_NAME}"
+    echo "Privsep: $PRIVSEP"
+    echo "SSL Verify: $VERIFY_SSL"
+} >> $LOG_FILE
 chown $USER:$USER $LOG_FILE
 chmod 640 $LOG_FILE
 

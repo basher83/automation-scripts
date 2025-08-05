@@ -4,10 +4,12 @@
 # Safely removes prometheus-pve-exporter and related components
 # 
 # Usage:
-#   ./uninstall-pve-exporter.sh [--force]
+#   ./uninstall-pve-exporter.sh [OPTIONS]
 #
 # Options:
 #   --force    Skip confirmation prompts
+#   --backup   Backup configuration before removal
+#   --help     Show help message
 
 set -euo pipefail
 trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
@@ -22,9 +24,34 @@ readonly USER_HOME="/var/lib/prometheus"
 
 # Parse arguments
 FORCE_MODE=false
-if [[ "${1:-}" == "--force" ]]; then
-    FORCE_MODE=true
-fi
+BACKUP_CONFIG=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force)
+            FORCE_MODE=true
+            shift
+            ;;
+        --backup)
+            BACKUP_CONFIG=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --force    Skip confirmation prompts"
+            echo "  --backup   Backup configuration before removal"
+            echo "  --help     Show this help message"
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
 
 # Colors for output (check if terminal supports colors)
 if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -114,6 +141,12 @@ fi
 
 log_info "Starting uninstallation of prometheus-pve-exporter..."
 
+# Check if exporter is currently responding (might be manually installed)
+if command -v curl &>/dev/null && curl -s -f -o /dev/null --connect-timeout 2 --max-time 5 "http://localhost:9221/" 2>/dev/null; then
+    log_warn "PVE exporter appears to be running on port 9221"
+    log_info "Will attempt to stop it during uninstallation"
+fi
+
 # Stop and disable service
 if service_exists "$SERVICE_NAME"; then
     log_info "Stopping and disabling service..."
@@ -151,11 +184,18 @@ else
     log_warn "Installation directory $INSTALL_DIR not found"
 fi
 
-# Remove Proxmox VE user
+# Remove Proxmox VE user and associated tokens/ACLs
 if pve_user_exists "$PVE_USERNAME"; then
-    log_info "Removing Proxmox VE user..."
+    log_info "Removing Proxmox VE user and permissions..."
+    
+    # First remove any ACL entries for this user
+    log_info "Cleaning up ACL entries..."
+    pveum acl delete / --users "$PVE_USERNAME" 2>/dev/null || true
+    pveum acl delete / --tokens "${PVE_USERNAME}!monitoring" 2>/dev/null || true
+    
+    # Then remove the user (this also removes associated tokens)
     pveum user delete "$PVE_USERNAME" || log_warn "Failed to remove PVE user"
-    log_info "Proxmox VE user removed"
+    log_info "Proxmox VE user and permissions removed"
 else
     log_warn "Proxmox VE user $PVE_USERNAME not found"
 fi
@@ -164,8 +204,14 @@ fi
 if user_exists "$USER"; then
     log_info "Removing system user..."
     
-    # Kill any processes owned by the user
-    pkill -u "$USER" 2>/dev/null || true
+    # Kill any processes owned by the user gracefully
+    if pgrep -u "$USER" > /dev/null 2>&1; then
+        log_info "Stopping processes owned by $USER..."
+        pkill -TERM -u "$USER" 2>/dev/null || true
+        sleep 2
+        # Force kill if still running
+        pkill -KILL -u "$USER" 2>/dev/null || true
+    fi
     
     # Remove user
     userdel "$USER" || log_warn "Failed to remove user"
@@ -181,29 +227,63 @@ if [[ -d "$USER_HOME" ]]; then
     log_info "User home directory removed"
 fi
 
-# Remove configuration directory
+# Handle configuration backup if requested
+if [[ "$BACKUP_CONFIG" == "true" ]] && [[ -f "$CONFIG_DIR/pve.yml" ]]; then
+    BACKUP_DIR="/root/pve-exporter-backup-$(date +%Y%m%d_%H%M%S)"
+    log_info "Creating backup of configuration..."
+    mkdir -p "$BACKUP_DIR"
+    cp "$CONFIG_DIR/pve.yml" "$BACKUP_DIR/"
+    cp "$CONFIG_DIR/pve.yml.backup"* "$BACKUP_DIR/" 2>/dev/null || true
+    log_info "Configuration backed up to: $BACKUP_DIR"
+fi
+
+# Remove PVE exporter configuration (be careful not to remove other Prometheus configs)
 if [[ -d "$CONFIG_DIR" ]]; then
-    log_info "Removing configuration directory..."
-    rm -rf "$CONFIG_DIR"
-    log_info "Configuration directory removed"
+    log_info "Removing PVE exporter configuration..."
+    
+    # Remove only PVE-specific files
+    local pve_files=(
+        "$CONFIG_DIR/pve.yml"
+        "$CONFIG_DIR/pve.yml.backup"*
+    )
+    
+    for file in "${pve_files[@]}"; do
+        if [[ -e "$file" ]]; then
+            rm -f "$file"
+            log_info "Removed: $(basename "$file")"
+        fi
+    done
+    
+    # Remove directory only if empty
+    if [[ -z "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
+        rmdir "$CONFIG_DIR"
+        log_info "Configuration directory removed (was empty)"
+    else
+        log_info "Configuration directory kept (contains other files)"
+    fi
 else
     log_warn "Configuration directory $CONFIG_DIR not found"
 fi
 
-# Create uninstall log
+# Create uninstall log with proper permissions
 LOG_DIR="/var/log"
-LOG_FILE="${LOG_DIR}/${SERVICE_NAME}-uninstall.log"
+LOG_FILE="${LOG_DIR}/${SERVICE_NAME}-uninstall-$(date +%Y%m%d_%H%M%S).log"
+
+# Create log file with correct permissions first
+touch "$LOG_FILE"
+chmod 640 "$LOG_FILE"
+
 {
     echo "Uninstallation completed at $(date)"
     echo "Uninstalled by: $(whoami)"
     echo "Components removed:"
     echo "  - Service: $SERVICE_NAME"
     echo "  - Installation: $INSTALL_DIR"
-    echo "  - Configuration: $CONFIG_DIR"
+    echo "  - Configuration: $CONFIG_DIR/pve.yml"
     echo "  - System user: $USER"
     echo "  - PVE user: $PVE_USERNAME"
+    echo "  - ACL permissions for $PVE_USERNAME"
 } >> "$LOG_FILE"
-chmod 640 "$LOG_FILE"
 
 log_info "✅ Prometheus PVE Exporter has been successfully removed"
 log_info "Uninstall log saved to: $LOG_FILE"
