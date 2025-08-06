@@ -131,6 +131,43 @@ if [[ ! -t 0 ]] || [[ "${NON_INTERACTIVE:-}" == "true" ]] || [[ "$*" == *"--non-
 fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >> "$LOG_FILE"
 
+# Package management optimization
+need_apt_update=true  # Start with true to ensure initial update
+missing_packages=()   # Accumulate missing packages
+
+# Function to check and queue packages for installation
+check_package() {
+    local package="$1"
+    if ! command -v "$package" &> /dev/null; then
+        log_info "Package '$package' is missing, queuing for installation"
+        missing_packages+=("$package")
+        return 1
+    fi
+    return 0
+}
+
+# Function to install all queued packages at once
+install_queued_packages() {
+    if [[ ${#missing_packages[@]} -gt 0 ]]; then
+        log_info "Installing missing packages: ${missing_packages[*]}"
+        
+        if $need_apt_update; then
+            log_info "Updating package index..."
+            sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+            need_apt_update=false
+        fi
+        
+        if sudo apt-get install -y "${missing_packages[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+            log_info "Successfully installed packages"
+            missing_packages=()  # Clear the queue
+        else
+            log_error "Failed to install some packages"
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # (rest of bootstrap.sh follows)
 # Install eza - a modern replacement for ls
 # Security Note: GPG key verification is interactive by default to avoid hardcoding
@@ -143,16 +180,9 @@ if ! command -v eza &> /dev/null; then
     log_info "Installing eza..."
     
     # Ensure required tools are installed
-    missing_tools=""
-    ! command -v gpg &> /dev/null && missing_tools="$missing_tools gpg"
-    ! command -v wget &> /dev/null && missing_tools="$missing_tools wget"
-    
-    if [ -n "$missing_tools" ]; then
-        log_info "Installing required tools:$missing_tools"
-        # Note: We'll update package index later after adding repository
-        sudo apt-get update
-        sudo apt-get install -y $missing_tools
-    fi
+    check_package "gpg"
+    check_package "wget"
+    install_queued_packages
     
     # Check if repository is already configured
     if [ ! -f "/etc/apt/keyrings/gierens.gpg" ] || [ ! -f "/etc/apt/sources.list.d/gierens.list" ]; then
@@ -237,13 +267,20 @@ if ! command -v eza &> /dev/null; then
         sudo gpg --dearmor < "$tmp_key" -o /etc/apt/keyrings/gierens.gpg
         echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
         sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+        
+        # Mark that we need apt update after adding new repository
+        need_apt_update=true
     else
         log_info "eza repository already configured"
     fi
     
     # Install eza
     log_info "Installing eza package..."
-    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+    if $need_apt_update; then
+        log_info "Updating package index..."
+        sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+        need_apt_update=false
+    fi
     sudo apt-get install -y eza 2>&1 | tee -a "$LOG_FILE"
     log_info "✓ eza installed successfully!"
 else
@@ -295,8 +332,12 @@ if ! command -v fd &> /dev/null && ! command -v fdfind &> /dev/null; then
     log_info "Installing fd-find..."
     
     # Install fd-find package
-    sudo apt-get update
-    sudo apt-get install -y fd-find
+    if $need_apt_update; then
+        log_info "Updating package index..."
+        sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+        need_apt_update=false
+    fi
+    sudo apt-get install -y fd-find 2>&1 | tee -a "$LOG_FILE"
     log_info "✓ fd-find installed successfully!"
     
     # Create symlink for fd command
@@ -327,14 +368,8 @@ if ! command -v uv &> /dev/null; then
     log_info "Installing uv..."
     
     # Ensure curl is installed
-    if ! command -v curl &> /dev/null; then
-        log_info "Installing curl..."
-        sudo apt-get install -y curl || {
-            log_error "Failed to install curl, updating package index..."
-            sudo apt-get update
-            sudo apt-get install -y curl
-        }
-    fi
+    check_package "curl"
+    install_queued_packages
     
     # Download installer to a temporary file for inspection
     log_info "Downloading uv installer..."
@@ -429,8 +464,12 @@ log_step "Checking ripgrep..."
 # Check if ripgrep is already installed
 if ! command -v rg &> /dev/null; then
     log_info "Installing ripgrep package..."
-    sudo apt-get update
-    sudo apt-get install -y ripgrep
+    if $need_apt_update; then
+        log_info "Updating package index..."
+        sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+        need_apt_update=false
+    fi
+    sudo apt-get install -y ripgrep 2>&1 | tee -a "$LOG_FILE"
     log_info "✓ ripgrep installed successfully!"
 else
     log_info "ripgrep is already installed"
@@ -444,11 +483,8 @@ if ! command -v infisical &> /dev/null; then
     log_info "Installing Infisical CLI..."
     
     # Ensure required tools are installed
-    if ! command -v curl &> /dev/null; then
-        log_info "Installing curl..."
-        sudo apt-get update
-        sudo apt-get install -y curl
-    fi
+    check_package "curl"
+    install_queued_packages
     
     # Add Infisical repository
     # Download and verify repository setup script
@@ -510,10 +546,17 @@ if ! command -v infisical &> /dev/null; then
         exit 1
     fi
     
+    # Repository was added, need update
+    need_apt_update=true
+    
     # Install infisical package
     log_info "Installing Infisical package..."
-    sudo apt-get update
-    sudo apt-get install -y infisical
+    if $need_apt_update; then
+        log_info "Updating package index..."
+        sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+        need_apt_update=false
+    fi
+    sudo apt-get install -y infisical 2>&1 | tee -a "$LOG_FILE"
     
     log_info "✓ Infisical CLI installed successfully!"
 else
@@ -539,7 +582,8 @@ if ! command -v claude &> /dev/null; then
         
         # Install Node.js 20 LTS
         curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        # NodeSource script already does apt-get update, so we don't need to
+        sudo apt-get install -y nodejs 2>&1 | tee -a "$LOG_FILE"
         
         # Verify installation
         node_version=$(node --version)
