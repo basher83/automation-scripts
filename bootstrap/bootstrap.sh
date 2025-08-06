@@ -17,8 +17,37 @@
 #   NON_INTERACTIVE=1            Run in non-interactive mode
 
 set -euo pipefail
-trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 IFS=$'\n\t'
+
+# Define log file with timestamp to prevent overwriting
+LOG_FILE="/var/log/bootstrap-tools-install-$(date +%Y%m%d_%H%M%S).log"
+
+# Check if we can write to /var/log (need sudo)
+if [[ $EUID -ne 0 ]] && [[ ! -w /var/log ]]; then
+    # If not root and can't write to /var/log, use home directory
+    LOG_FILE="$HOME/bootstrap-tools-install-$(date +%Y%m%d_%H%M%S).log"
+fi
+
+# Make LOG_FILE readonly after determining location
+readonly LOG_FILE
+
+# Cleanup function
+cleanup() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Script failed with exit code: $exit_code" >> "$LOG_FILE"
+        # Need to define print_error inline since colors might not be set yet
+        echo -e "\033[0;31m[ERROR]\033[0m Script failed! Check the log for details: $LOG_FILE" >&2
+    fi
+}
+
+# Set traps
+trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
+trap cleanup EXIT
+
+# Initialize log file
+echo "Bootstrap script started at $(date)" > "$LOG_FILE"
+chmod 640 "$LOG_FILE" 2>/dev/null || true
 
 # Color codes for output (check if terminal supports colors)
 if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -26,42 +55,66 @@ if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
     readonly YELLOW='\033[1;33m'
     readonly RED='\033[0;31m'
     readonly BLUE='\033[0;34m'
+    readonly CYAN='\033[0;36m'
+    readonly BOLD='\033[1m'
     readonly NC='\033[0m' # No Color
 else
     readonly GREEN=''
     readonly YELLOW=''
     readonly RED=''
     readonly BLUE=''
+    readonly CYAN=''
+    readonly BOLD=''
     readonly NC=''
 fi
 
-# Logging functions
+# Logging functions - output to both console and file
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*" >> "$LOG_FILE"
 }
 
 log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $*" >> "$LOG_FILE"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $*"
+    echo -e "${RED}[ERROR]${NC} $*" >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" >> "$LOG_FILE"
 }
 
 log_step() {
     echo -e "${BLUE}[STEP]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] $*" >> "$LOG_FILE"
+}
+
+# Print functions that only go to console (not logged)
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $*" >&2
 }
 
 # Script header
 log_info "Bootstrap Script - Installing Modern CLI Tools"
 log_info "Tools: eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile"
+print_info "Log file: $LOG_FILE"
 echo
+
+# Log debug information
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.1" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >> "$LOG_FILE"
 
 # Non-interactive mode support
 INTERACTIVE=true
 if [[ ! -t 0 ]] || [[ "${NON_INTERACTIVE:-}" == "true" ]] || [[ "$*" == *"--non-interactive"* ]]; then
     INTERACTIVE=false
 fi
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >> "$LOG_FILE"
 
 # (rest of bootstrap.sh follows)
 # Install eza - a modern replacement for ls
@@ -177,8 +230,8 @@ if ! command -v eza &> /dev/null; then
     
     # Install eza
     log_info "Installing eza package..."
-    sudo apt-get update
-    sudo apt-get install -y eza
+    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+    sudo apt-get install -y eza 2>&1 | tee -a "$LOG_FILE"
     log_info "✓ eza installed successfully!"
 else
     log_info "eza is already installed"
@@ -457,8 +510,8 @@ fi
 # Install Claude Code - AI coding assistant
 log_step "Checking Claude Code..."
 
-# Check if claude-code is already installed
-if ! command -v claude-code &> /dev/null; then
+# Check if claude is already installed (command is 'claude', not 'claude-code')
+if ! command -v claude &> /dev/null; then
     log_info "Installing Claude Code..."
     
     # Check if Node.js is installed and version is 18+
@@ -507,6 +560,8 @@ if ! command -v claude-code &> /dev/null; then
                 log_info "Added npm global path to $(basename "$rc_file")"
             fi
         done
+    else
+        log_info "npm global path already in PATH"
     fi
     
     # Install Claude Code
@@ -530,12 +585,26 @@ if ! command -v claude-code &> /dev/null; then
         fi
     fi
     
-    # Verify installation
-    if command -v claude-code &> /dev/null; then
+    # Force reload npm global bin path after installation
+    export PATH="$HOME/.npm-global/bin:$PATH"
+    
+    # Also try to rehash if using zsh
+    if [ -n "$ZSH_VERSION" ]; then
+        hash -r 2>/dev/null || true
+    fi
+    
+    # Verify installation with full path first (command is 'claude', not 'claude-code')
+    if [ -x "$HOME/.npm-global/bin/claude" ]; then
         log_info "✓ Claude Code installed successfully!"
-        log_info "You can now use 'claude-code' command"
+        log_info "You can now use 'claude' command"
+        
+        # Double check if it's available in PATH
+        if ! command -v claude &> /dev/null; then
+            log_warn "Note: You may need to restart your shell for the command to be available"
+            log_info "Or run: export PATH=\"\$HOME/.npm-global/bin:\$PATH\""
+        fi
     else
-        log_warn "Claude Code installation completed but command not found in PATH"
+        log_warn "Claude Code installation completed but binary not found"
         log_warn "You may need to restart your shell or run: source ~/.bashrc"
     fi
 else
@@ -572,20 +641,24 @@ if ! command -v task &> /dev/null; then
         exit 1
     fi
     
-    # Check for expected content markers
-    if ! grep -q "task" "$tmp_taskfile_installer" || ! grep -q "taskfile" "$tmp_taskfile_installer"; then
+    # Check for expected content markers - look for go-task/task which is the official repo
+    if ! grep -q "go-task/task" "$tmp_taskfile_installer" && ! grep -q "goreleaser/godownloader" "$tmp_taskfile_installer"; then
         log_error "Installer doesn't appear to be the official Taskfile installer"
+        log_error "Expected to find 'go-task/task' in installer content"
         exit 1
     fi
     
     # Show installer details for transparency
     log_info "Installer size: $(wc -c < "$tmp_taskfile_installer") bytes"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] First 5 lines of installer:" >> "$LOG_FILE"
+    head -5 "$tmp_taskfile_installer" >> "$LOG_FILE"
     
     # For automated/CI environments, allow skipping confirmation
     if [ -n "${TASKFILE_SKIP_CONFIRM:-}" ] || [ "$INTERACTIVE" == "false" ]; then
         log_info "Installing Taskfile to $HOME/.local/bin"
         # Install to user's local bin directory
-        sh "$tmp_taskfile_installer" -- -d -b "$HOME/.local/bin"
+        # The correct syntax is: sh -c "$(cat installer)" -- -d -b <dir>
+        sh -c "$(cat "$tmp_taskfile_installer")" -- -d -b "$HOME/.local/bin"
     else
         # Interactive mode - ask for confirmation
         echo ""
@@ -599,7 +672,8 @@ if ! command -v task &> /dev/null; then
             echo "Installation cancelled."
         else
             log_info "Installing Taskfile to $HOME/.local/bin"
-            sh "$tmp_taskfile_installer" -- -d -b "$HOME/.local/bin"
+            # The correct syntax is: sh -c "$(cat installer)" -- -d -b <dir>
+            sh -c "$(cat "$tmp_taskfile_installer")" -- -d -b "$HOME/.local/bin"
         fi
     fi
     
@@ -623,6 +697,7 @@ fi
 
 # Summary
 echo
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 log_info "Bootstrap completed successfully!"
 log_info "Installed tools:"
 log_info "  - eza: Modern replacement for ls"
@@ -630,7 +705,9 @@ log_info "  - fd: User-friendly alternative to find"
 log_info "  - uv: Ultra-fast Python package installer"
 log_info "  - ripgrep: Lightning-fast recursive search"
 log_info "  - infisical: Secure secrets management CLI"
-log_info "  - claude-code: AI-powered coding assistant"
+log_info "  - claude: AI-powered coding assistant (Claude Code)"
 log_info "  - taskfile: Modern task runner and build tool"
+echo -e "${GREEN}✓ Log saved to: ${BOLD}$LOG_FILE${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo
 log_info "You may need to restart your shell or run: source ~/.bashrc"
