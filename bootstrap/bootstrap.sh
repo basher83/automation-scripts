@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bootstrap Script for Modern CLI Tools
-# Installs eza, fd-find, uv, ripgrep, infisical, claude-code, and taskfile on Debian/Ubuntu systems
+# Installs eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile, and direnv on Debian/Ubuntu systems
 # 
 # Usage:
 #   ./bootstrap.sh
@@ -13,6 +13,7 @@
 #   INFISICAL_SKIP_GPG_VERIFY=1  Skip GPG verification for Infisical
 #   CLAUDE_CODE_SKIP_CONFIRM=1   Skip confirmation for Claude Code
 #   TASKFILE_SKIP_CONFIRM=1      Skip confirmation for Taskfile
+#   DIRENV_SKIP_CONFIRM=1        Skip confirmation for direnv
 #   NO_COLOR=1                   Disable colored output
 #   NON_INTERACTIVE=1            Run in non-interactive mode
 
@@ -100,7 +101,7 @@ print_error() {
 
 # Script header
 log_info "Bootstrap Script - Installing Modern CLI Tools"
-log_info "Tools: eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile"
+log_info "Tools: eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile, direnv"
 print_info "Log file: $LOG_FILE"
 echo
 
@@ -723,6 +724,116 @@ else
     log_info "Taskfile is already installed. Version: $task_version"
 fi
 
+# Install direnv - automatic environment variable loader
+log_step "Checking direnv..."
+
+# Check if direnv is already installed
+if ! command -v direnv &> /dev/null; then
+    log_info "Installing direnv..."
+    
+    # Download and verify installer script
+    tmp_direnv_installer=$(mktemp)
+    trap 'rm -f "$tmp_direnv_installer"' EXIT
+    
+    DIRENV_INSTALLER_URL="https://direnv.net/install.sh"
+    
+    log_info "Downloading direnv installer..."
+    if ! curl -sfL -o "$tmp_direnv_installer" "$DIRENV_INSTALLER_URL"; then
+        log_error "Failed to download direnv installer"
+        exit 1
+    fi
+    
+    # Basic validation - check if it's a shell script
+    if [ ! -s "$tmp_direnv_installer" ]; then
+        log_error "Downloaded direnv installer is empty"
+        exit 1
+    fi
+    
+    if ! head -n 1 "$tmp_direnv_installer" | grep -q "^#!/"; then
+        log_error "Downloaded file doesn't appear to be a shell script"
+        exit 1
+    fi
+    
+    # Check for expected content markers
+    if ! grep -q "direnv" "$tmp_direnv_installer"; then
+        log_error "Installer doesn't appear to be the official direnv installer"
+        exit 1
+    fi
+    
+    # Show installer details for transparency
+    log_info "Installer size: $(wc -c < "$tmp_direnv_installer") bytes"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] First 5 lines of installer:" >> "$LOG_FILE"
+    head -5 "$tmp_direnv_installer" >> "$LOG_FILE"
+    
+    # For automated/CI environments, allow skipping confirmation
+    if [ -n "${DIRENV_SKIP_CONFIRM:-}" ] || [ "$INTERACTIVE" == "false" ]; then
+        log_info "Installing direnv to $HOME/.local/bin"
+        # Install to user's local bin directory
+        export bin_path="$HOME/.local/bin"
+        bash "$tmp_direnv_installer"
+    else
+        # Interactive mode - ask for confirmation
+        echo ""
+        echo "About to install direnv."
+        echo "This will download the binary from direnv.net"
+        echo "Installation directory: $HOME/.local/bin"
+        echo ""
+        echo "Do you want to install direnv? [Y/n]"
+        read -r response
+        if [[ "$response" =~ ^[Nn]$ ]]; then
+            echo "Installation cancelled."
+        else
+            log_info "Installing direnv to $HOME/.local/bin"
+            export bin_path="$HOME/.local/bin"
+            bash "$tmp_direnv_installer"
+        fi
+    fi
+    
+    # Add ~/.local/bin to PATH if not already there (should already be done for fd)
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    
+    # Verify installation
+    if command -v direnv &> /dev/null; then
+        direnv_version=$(direnv version)
+        log_info "✓ direnv installed successfully! Version: $direnv_version"
+        
+        # Add shell hook configuration
+        log_info "Setting up direnv shell hook..."
+        
+        # Detect shell and add appropriate hook
+        direnv_hook_bash='eval "$(direnv hook bash)"'
+        direnv_hook_zsh='eval "$(direnv hook zsh)"'
+        
+        # Add to bash
+        if [ -f "$HOME/.bashrc" ] && ! grep -q "direnv hook bash" "$HOME/.bashrc"; then
+            echo "" >> "$HOME/.bashrc"
+            echo "# direnv hook" >> "$HOME/.bashrc"
+            echo "$direnv_hook_bash" >> "$HOME/.bashrc"
+            log_info "Added direnv hook to ~/.bashrc"
+        fi
+        
+        # Add to zsh
+        if [ -f "$HOME/.zshrc" ] && ! grep -q "direnv hook zsh" "$HOME/.zshrc"; then
+            echo "" >> "$HOME/.zshrc"
+            echo "# direnv hook" >> "$HOME/.zshrc"
+            echo "$direnv_hook_zsh" >> "$HOME/.zshrc"
+            log_info "Added direnv hook to ~/.zshrc"
+        fi
+        
+        log_info "Note: You need to restart your shell or run the appropriate hook command:"
+        log_info "  For bash: eval \"\$(direnv hook bash)\""
+        log_info "  For zsh:  eval \"\$(direnv hook zsh)\""
+    else
+        log_warn "direnv installation completed but 'direnv' command not found in PATH"
+        log_warn "You may need to restart your shell or run: source ~/.bashrc"
+    fi
+else
+    direnv_version=$(direnv version)
+    log_info "direnv is already installed. Version: $direnv_version"
+fi
+
 # Summary
 echo
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -735,6 +846,7 @@ log_info "  - ripgrep: Lightning-fast recursive search"
 log_info "  - infisical: Secure secrets management CLI"
 log_info "  - claude: AI-powered coding assistant (Claude Code)"
 log_info "  - taskfile: Modern task runner and build tool"
+log_info "  - direnv: Automatic environment variable loader"
 echo -e "${GREEN}✓ Log saved to: ${BOLD}$LOG_FILE${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo

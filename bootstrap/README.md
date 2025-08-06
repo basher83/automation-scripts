@@ -56,6 +56,14 @@ The bootstrap script installs the following tools:
 - **Command**: Available as `task`
 - **Installation**: Binary downloaded from official source to ~/.local/bin
 
+### [direnv](https://direnv.net/) - Environment variable manager
+
+- **Purpose**: Automatically load and unload environment variables based on current directory
+- **Features**: Per-project environment isolation, .envrc file support, shell integration
+- **Command**: Available as `direnv`
+- **Installation**: Binary downloaded from official source to ~/.local/bin
+- **Shell Hook**: Automatically configured for bash and zsh
+
 ## 📋 Requirements
 
 - **Operating System**: Ubuntu/Debian-based Linux distributions
@@ -136,6 +144,12 @@ For automated installations (CI/CD environments), you can use these environment 
 - **Usage**: `TASKFILE_SKIP_CONFIRM=1 ./bootstrap.sh`
 - **Default**: Interactive confirmation in terminal sessions
 
+### `DIRENV_SKIP_CONFIRM`
+
+- **Purpose**: Skips confirmation prompts for direnv installation
+- **Usage**: `DIRENV_SKIP_CONFIRM=1 ./bootstrap.sh`
+- **Default**: Interactive confirmation in terminal sessions
+
 ### `NON_INTERACTIVE`
 
 - **Purpose**: Run the entire script in non-interactive mode
@@ -155,10 +169,11 @@ For automated installations (CI/CD environments), you can use these environment 
 
 The script automatically updates your shell configuration files:
 
-- Adds `~/.local/bin` to PATH (for fd symlink and uv)
+- Adds `~/.local/bin` to PATH (for fd symlink, uv, taskfile, and direnv)
 - Adds `~/.npm-global/bin` to PATH (for Claude Code)
 - Updates `.bashrc`, `.zshrc`, and `.profile` as needed
 - Configures npm to use user directory for global packages
+- Configures direnv shell hooks for bash and zsh
 
 ## 🔄 Idempotency
 
@@ -185,6 +200,7 @@ UV_INSTALL_SKIP_CONFIRM=1 \
 INFISICAL_SKIP_GPG_VERIFY=1 \
 CLAUDE_CODE_SKIP_CONFIRM=1 \
 TASKFILE_SKIP_CONFIRM=1 \
+DIRENV_SKIP_CONFIRM=1 \
 ./bootstrap.sh
 
 # Or use non-interactive mode
@@ -238,3 +254,4 @@ bootstrap/bootstrap.sh \
 - [Infisical documentation](https://infisical.com/docs/cli/overview)
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/overview)
 - [Taskfile documentation](https://taskfile.dev/)
+- [direnv documentation](https://direnv.net/)

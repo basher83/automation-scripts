@@ -47,6 +47,15 @@ Track tools that have been added, are being evaluated, or are planned for the bo
 - Added: 2025-08-06
 - [Taskfile](https://taskfile.dev/installation/)
 
+### ✅ direnv
+
+- Automatic environment variable loader based on current directory
+- Prerequisites: None. Install binary and hook into shell.
+- Added: 2025-08-06
+- [direnv](https://direnv.net/docs/installation.html)
+
+---
+
 ## In Evaluation 🔍
 
 <!-- Tools being tested/evaluated for inclusion -->
@@ -61,6 +70,8 @@ Track tools that have been added, are being evaluated, or are planned for the bo
 - Evaluation started: YYYY-MM-DD
 - [Documentation](link)
 -->
+
+---
 
 ## To Be Added 📝
 
