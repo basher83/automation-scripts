@@ -32,9 +32,23 @@ fi
 # Make LOG_FILE readonly after determining location
 readonly LOG_FILE
 
+# Array to track temporary files for cleanup
+_tmp_files=()
+
 # Cleanup function
 cleanup() {
     local exit_code=$?
+    
+    # Clean up temporary files and directories
+    for tmp_file in "${_tmp_files[@]}"; do
+        if [[ -d "$tmp_file" ]]; then
+            rm -rf "$tmp_file" 2>/dev/null || true
+        elif [[ -f "$tmp_file" ]]; then
+            rm -f "$tmp_file" 2>/dev/null || true
+        fi
+    done
+    
+    # Original cleanup logic
     if [[ $exit_code -ne 0 ]]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Script failed with exit code: $exit_code" >> "$LOG_FILE"
         # Need to define print_error inline since colors might not be set yet
@@ -151,6 +165,7 @@ if ! command -v eza &> /dev/null; then
         # Download GPG key to temporary file
         log_info "Downloading eza repository key..."
         tmp_key=$(mktemp)
+        _tmp_files+=("$tmp_key")
         
         if ! wget -qO "$tmp_key" https://raw.githubusercontent.com/eza-community/eza/main/deb.asc; then
             log_error "Failed to download eza GPG key"
@@ -161,6 +176,7 @@ if ! command -v eza &> /dev/null; then
         echo "GPG key information:"
         # Import key to temporary keyring for verification
         tmp_keyring=$(mktemp -d)
+        _tmp_files+=("$tmp_keyring")
         GNUPGHOME="$tmp_keyring" gpg --import "$tmp_key" 2>/dev/null
         key_info=$(GNUPGHOME="$tmp_keyring" gpg --list-keys 2>/dev/null)
         # Parse fingerprint using --with-colons for machine-readable output
@@ -221,10 +237,6 @@ if ! command -v eza &> /dev/null; then
         sudo gpg --dearmor < "$tmp_key" -o /etc/apt/keyrings/gierens.gpg
         echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
         sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
-        
-        # Clean up
-        rm -f "$tmp_key"
-        rm -rf "$tmp_keyring"
     else
         log_info "eza repository already configured"
     fi
@@ -327,7 +339,7 @@ if ! command -v uv &> /dev/null; then
     # Download installer to a temporary file for inspection
     log_info "Downloading uv installer..."
     tmp_installer=$(mktemp)
-    trap "rm -f $tmp_installer" EXIT
+    _tmp_files+=("$tmp_installer")
     
     # Use the official installer URL
     UV_INSTALLER_URL="https://astral.sh/uv/install.sh"
@@ -441,7 +453,7 @@ if ! command -v infisical &> /dev/null; then
     # Add Infisical repository
     # Download and verify repository setup script
     tmp_infisical_setup=$(mktemp)
-    trap 'rm -f "$tmp_infisical_setup"' EXIT
+    _tmp_files+=("$tmp_infisical_setup")
     
     INFISICAL_SETUP_URL="https://artifacts-cli.infisical.com/setup.deb.sh"
     
@@ -649,7 +661,7 @@ if ! command -v task &> /dev/null; then
     
     # Download and verify installer script
     tmp_taskfile_installer=$(mktemp)
-    trap 'rm -f "$tmp_taskfile_installer"' EXIT
+    _tmp_files+=("$tmp_taskfile_installer")
     
     TASKFILE_INSTALLER_URL="https://taskfile.dev/install.sh"
     
@@ -733,7 +745,7 @@ if ! command -v direnv &> /dev/null; then
     
     # Download and verify installer script
     tmp_direnv_installer=$(mktemp)
-    trap 'rm -f "$tmp_direnv_installer"' EXIT
+    _tmp_files+=("$tmp_direnv_installer")
     
     DIRENV_INSTALLER_URL="https://direnv.net/install.sh"
     
