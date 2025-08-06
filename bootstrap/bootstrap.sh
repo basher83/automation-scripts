@@ -1,16 +1,20 @@
 #!/bin/bash
 
 # Bootstrap Script for Modern CLI Tools
-# Installs eza, fd-find, uv, and ripgrep on Debian/Ubuntu systems
+# Installs eza, fd-find, uv, ripgrep, infisical, claude-code, and taskfile on Debian/Ubuntu systems
 # 
 # Usage:
 #   ./bootstrap.sh
 #   curl -fsSL https://example.com/bootstrap.sh | bash
 #
 # Environment Variables:
-#   EZA_SKIP_GPG_VERIFY=1     Skip GPG verification for eza
-#   UV_INSTALL_SKIP_CONFIRM=1 Skip confirmation for uv installer
-#   NO_COLOR=1                Disable colored output
+#   EZA_SKIP_GPG_VERIFY=1        Skip GPG verification for eza
+#   UV_INSTALL_SKIP_CONFIRM=1    Skip confirmation for uv installer
+#   INFISICAL_SKIP_GPG_VERIFY=1  Skip GPG verification for Infisical
+#   CLAUDE_CODE_SKIP_CONFIRM=1   Skip confirmation for Claude Code
+#   TASKFILE_SKIP_CONFIRM=1      Skip confirmation for Taskfile
+#   NO_COLOR=1                   Disable colored output
+#   NON_INTERACTIVE=1            Run in non-interactive mode
 
 set -euo pipefail
 trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
@@ -50,8 +54,14 @@ log_step() {
 
 # Script header
 log_info "Bootstrap Script - Installing Modern CLI Tools"
-log_info "Tools: eza, fd-find, uv, ripgrep"
+log_info "Tools: eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile"
 echo
+
+# Non-interactive mode support
+INTERACTIVE=true
+if [[ ! -t 0 ]] || [[ "${NON_INTERACTIVE:-}" == "true" ]] || [[ "$*" == *"--non-interactive"* ]]; then
+    INTERACTIVE=false
+fi
 
 # (rest of bootstrap.sh follows)
 # Install eza - a modern replacement for ls
@@ -348,7 +358,7 @@ else
 fi
 
 # Install ripgrep - a fast search tool
-log_info "Installing ripgrep..."
+log_step "Checking ripgrep..."
 
 # Check if ripgrep is already installed
 if ! command -v rg &> /dev/null; then
@@ -360,6 +370,257 @@ else
     log_info "ripgrep is already installed"
 fi
 
+# Install Infisical CLI - secure secrets management
+log_step "Checking Infisical CLI..."
+
+# Check if infisical is already installed
+if ! command -v infisical &> /dev/null; then
+    log_info "Installing Infisical CLI..."
+    
+    # Ensure required tools are installed
+    if ! command -v curl &> /dev/null; then
+        log_info "Installing curl..."
+        sudo apt-get update
+        sudo apt-get install -y curl
+    fi
+    
+    # Add Infisical repository
+    # Download and verify repository setup script
+    tmp_infisical_setup=$(mktemp)
+    trap 'rm -f "$tmp_infisical_setup"' EXIT
+    
+    INFISICAL_SETUP_URL="https://artifacts-cli.infisical.com/setup.deb.sh"
+    
+    log_info "Downloading Infisical repository setup script..."
+    if ! curl -1sLf -o "$tmp_infisical_setup" "$INFISICAL_SETUP_URL"; then
+        log_error "Failed to download Infisical setup script"
+        exit 1
+    fi
+    
+    # Basic validation - check if it's a shell script
+    if [ ! -s "$tmp_infisical_setup" ]; then
+        log_error "Downloaded Infisical setup script is empty"
+        exit 1
+    fi
+    
+    if ! head -n 1 "$tmp_infisical_setup" | grep -q "^#!/"; then
+        log_error "Downloaded file doesn't appear to be a shell script"
+        exit 1
+    fi
+    
+    # Check for expected content markers
+    if ! grep -q "infisical" "$tmp_infisical_setup"; then
+        log_error "Setup script doesn't appear to be the official Infisical installer"
+        exit 1
+    fi
+    
+    # Show script details for transparency
+    log_info "Setup script size: $(wc -c < "$tmp_infisical_setup") bytes"
+    
+    # For automated/CI environments, allow skipping confirmation
+    if [ -n "${INFISICAL_SKIP_GPG_VERIFY:-}" ]; then
+        log_warn "Skipping Infisical setup verification (INFISICAL_SKIP_GPG_VERIFY is set)"
+    elif [ "$INTERACTIVE" == "true" ]; then
+        # Interactive mode - ask for confirmation
+        echo ""
+        echo "About to add Infisical repository to your system."
+        echo "This will execute the official setup script from artifacts-cli.infisical.com"
+        echo ""
+        echo "Do you trust this source? [y/N]"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Installation cancelled."
+            exit 1
+        fi
+    else
+        # Non-interactive mode
+        log_info "Running in non-interactive mode, proceeding with Infisical repository setup"
+    fi
+    
+    # Execute the setup script
+    log_info "Setting up Infisical repository..."
+    if ! sudo -E bash "$tmp_infisical_setup"; then
+        log_error "Failed to setup Infisical repository"
+        exit 1
+    fi
+    
+    # Install infisical package
+    log_info "Installing Infisical package..."
+    sudo apt-get update
+    sudo apt-get install -y infisical
+    
+    log_info "✓ Infisical CLI installed successfully!"
+else
+    log_info "Infisical CLI is already installed"
+fi
+
+# Install Claude Code - AI coding assistant
+log_step "Checking Claude Code..."
+
+# Check if claude-code is already installed
+if ! command -v claude-code &> /dev/null; then
+    log_info "Installing Claude Code..."
+    
+    # Check if Node.js is installed and version is 18+
+    node_version=""
+    if command -v node &> /dev/null; then
+        node_version=$(node --version | sed 's/v//' | cut -d. -f1)
+    fi
+    
+    if [ -z "$node_version" ] || [ "$node_version" -lt 18 ]; then
+        log_info "Node.js 18+ is required for Claude Code"
+        log_info "Installing Node.js via NodeSource repository..."
+        
+        # Install Node.js 20 LTS
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+        
+        # Verify installation
+        node_version=$(node --version)
+        log_info "Installed Node.js $node_version"
+    else
+        log_info "Node.js $(node --version) is already installed"
+    fi
+    
+    # Configure npm to use user directory for global packages
+    # This avoids permission issues and follows security best practices
+    log_info "Configuring npm for user-level global packages..."
+    
+    # Create npm global directory in user home
+    mkdir -p "$HOME/.npm-global"
+    
+    # Configure npm
+    npm config set prefix "$HOME/.npm-global"
+    
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
+        export PATH="$HOME/.npm-global/bin:$PATH"
+        
+        # Persist PATH update for future sessions
+        log_info "Updating shell configuration for npm global packages..."
+        npm_path_line='export PATH="$HOME/.npm-global/bin:$PATH"'
+        
+        # Update shell configuration files
+        for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+            if [ -f "$rc_file" ] && ! grep -q "\.npm-global/bin" "$rc_file"; then
+                echo "$npm_path_line" >> "$rc_file"
+                log_info "Added npm global path to $(basename "$rc_file")"
+            fi
+        done
+    fi
+    
+    # Install Claude Code
+    log_info "Installing @anthropic-ai/claude-code package..."
+    
+    # For automated/CI environments, allow skipping confirmation
+    if [ -n "${CLAUDE_CODE_SKIP_CONFIRM:-}" ] || [ "$INTERACTIVE" == "false" ]; then
+        npm install -g @anthropic-ai/claude-code
+    else
+        # Interactive mode - provide information
+        echo ""
+        echo "About to install Claude Code globally via npm."
+        echo "This will install to: $HOME/.npm-global"
+        echo ""
+        echo "Proceed with installation? [Y/n]"
+        read -r response
+        if [[ "$response" =~ ^[Nn]$ ]]; then
+            echo "Installation cancelled."
+        else
+            npm install -g @anthropic-ai/claude-code
+        fi
+    fi
+    
+    # Verify installation
+    if command -v claude-code &> /dev/null; then
+        log_info "✓ Claude Code installed successfully!"
+        log_info "You can now use 'claude-code' command"
+    else
+        log_warn "Claude Code installation completed but command not found in PATH"
+        log_warn "You may need to restart your shell or run: source ~/.bashrc"
+    fi
+else
+    log_info "Claude Code is already installed"
+fi
+
+# Install Taskfile - task runner / build tool
+log_step "Checking Taskfile..."
+
+# Check if task is already installed
+if ! command -v task &> /dev/null; then
+    log_info "Installing Taskfile..."
+    
+    # Download and verify installer script
+    tmp_taskfile_installer=$(mktemp)
+    trap 'rm -f "$tmp_taskfile_installer"' EXIT
+    
+    TASKFILE_INSTALLER_URL="https://taskfile.dev/install.sh"
+    
+    log_info "Downloading Taskfile installer..."
+    if ! curl -fsSL -o "$tmp_taskfile_installer" "$TASKFILE_INSTALLER_URL"; then
+        log_error "Failed to download Taskfile installer"
+        exit 1
+    fi
+    
+    # Basic validation - check if it's a shell script
+    if [ ! -s "$tmp_taskfile_installer" ]; then
+        log_error "Downloaded Taskfile installer is empty"
+        exit 1
+    fi
+    
+    if ! head -n 1 "$tmp_taskfile_installer" | grep -q "^#!/"; then
+        log_error "Downloaded file doesn't appear to be a shell script"
+        exit 1
+    fi
+    
+    # Check for expected content markers
+    if ! grep -q "task" "$tmp_taskfile_installer" || ! grep -q "taskfile" "$tmp_taskfile_installer"; then
+        log_error "Installer doesn't appear to be the official Taskfile installer"
+        exit 1
+    fi
+    
+    # Show installer details for transparency
+    log_info "Installer size: $(wc -c < "$tmp_taskfile_installer") bytes"
+    
+    # For automated/CI environments, allow skipping confirmation
+    if [ -n "${TASKFILE_SKIP_CONFIRM:-}" ] || [ "$INTERACTIVE" == "false" ]; then
+        log_info "Installing Taskfile to $HOME/.local/bin"
+        # Install to user's local bin directory
+        sh "$tmp_taskfile_installer" -- -d -b "$HOME/.local/bin"
+    else
+        # Interactive mode - ask for confirmation
+        echo ""
+        echo "About to install Taskfile task runner."
+        echo "This will download the binary from taskfile.dev"
+        echo "Installation directory: $HOME/.local/bin"
+        echo ""
+        echo "Do you want to install Taskfile? [Y/n]"
+        read -r response
+        if [[ "$response" =~ ^[Nn]$ ]]; then
+            echo "Installation cancelled."
+        else
+            log_info "Installing Taskfile to $HOME/.local/bin"
+            sh "$tmp_taskfile_installer" -- -d -b "$HOME/.local/bin"
+        fi
+    fi
+    
+    # Add ~/.local/bin to PATH if not already there (should already be done for fd)
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    
+    # Verify installation
+    if command -v task &> /dev/null; then
+        task_version=$(task --version | head -n 1)
+        log_info "✓ Taskfile installed successfully! Version: $task_version"
+    else
+        log_warn "Taskfile installation completed but 'task' command not found in PATH"
+        log_warn "You may need to restart your shell or run: source ~/.bashrc"
+    fi
+else
+    task_version=$(task --version | head -n 1)
+    log_info "Taskfile is already installed. Version: $task_version"
+fi
+
 # Summary
 echo
 log_info "Bootstrap completed successfully!"
@@ -368,5 +629,8 @@ log_info "  - eza: Modern replacement for ls"
 log_info "  - fd: User-friendly alternative to find"
 log_info "  - uv: Ultra-fast Python package installer"
 log_info "  - ripgrep: Lightning-fast recursive search"
+log_info "  - infisical: Secure secrets management CLI"
+log_info "  - claude-code: AI-powered coding assistant"
+log_info "  - taskfile: Modern task runner and build tool"
 echo
 log_info "You may need to restart your shell or run: source ~/.bashrc"

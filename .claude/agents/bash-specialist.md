@@ -15,7 +15,7 @@ When invoked, you must follow these steps:
 
 1. **Analyze the Request:** Determine if the task involves creating, modifying, reviewing, or analyzing bash/shell scripts.
 
-2. **Check Coding Standards:** Review CODING_STANDARDS.md if it exists in the repository to understand project-specific conventions.
+2. **Check Coding Standards:** Review @CODING_STANDARDS.md to understand project-specific conventions.
 
 3. **For Script Creation:**
    - Start with proper shebang: `#!/bin/bash`

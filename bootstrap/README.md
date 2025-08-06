@@ -6,7 +6,7 @@
 
 This script bootstraps your development environment by installing essential
 command-line tools that enhance productivity and provide modern alternatives to
-traditional Unix utilities.
+traditional Unix utilities, along with security, AI-powered development, and build automation tools.
 
 ## 🛠️ Installed Tools
 
@@ -36,6 +36,26 @@ The bootstrap script installs the following tools:
 - **Features**: Faster than grep, respects .gitignore, colored output
 - **Command**: Available as `rg`
 
+### [Infisical](https://infisical.com/docs/cli/overview) - Secure secrets management
+
+- **Purpose**: Manage and sync environment variables and secrets securely
+- **Features**: End-to-end encryption, team collaboration, audit logs
+- **Installation**: Via official APT repository with repository setup verification
+
+### [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) - AI coding assistant
+
+- **Purpose**: AI-powered coding assistant integrated with your development workflow
+- **Features**: Code completion, refactoring, natural language to code
+- **Requirements**: Node.js 18+ (automatically installed if not present)
+- **Installation**: Via npm to user directory (no sudo required)
+
+### [Taskfile](https://taskfile.dev/) - Modern task runner
+
+- **Purpose**: Simple, modern alternative to Make with YAML-based task definitions
+- **Features**: Cross-platform, dependency management, parallel execution
+- **Command**: Available as `task`
+- **Installation**: Binary downloaded from official source to ~/.local/bin
+
 ## 📋 Requirements
 
 - **Operating System**: Ubuntu/Debian-based Linux distributions
@@ -50,6 +70,7 @@ The following tools are automatically installed if missing:
 - `curl` - for downloading installers
 - `wget` - for downloading GPG keys  
 - `gpg` - for signature verification
+- `nodejs` (v18+) - for Claude Code (installed if not present)
 
 ## 🚀 Usage
 
@@ -97,10 +118,36 @@ For automated installations (CI/CD environments), you can use these environment 
 - **Usage**: `UV_INSTALL_SKIP_CONFIRM=1 ./bootstrap.sh`
 - **Default**: Interactive confirmation in terminal sessions
 
+### `INFISICAL_SKIP_GPG_VERIFY`
+
+- **Purpose**: Skips verification prompt for Infisical repository setup
+- **Usage**: `INFISICAL_SKIP_GPG_VERIFY=1 ./bootstrap.sh`
+- **Security Note**: Only use in trusted environments
+
+### `CLAUDE_CODE_SKIP_CONFIRM`
+
+- **Purpose**: Skips confirmation prompts for Claude Code installation
+- **Usage**: `CLAUDE_CODE_SKIP_CONFIRM=1 ./bootstrap.sh`
+- **Default**: Interactive confirmation in terminal sessions
+
+### `TASKFILE_SKIP_CONFIRM`
+
+- **Purpose**: Skips confirmation prompts for Taskfile installation
+- **Usage**: `TASKFILE_SKIP_CONFIRM=1 ./bootstrap.sh`
+- **Default**: Interactive confirmation in terminal sessions
+
+### `NON_INTERACTIVE`
+
+- **Purpose**: Run the entire script in non-interactive mode
+- **Usage**: `NON_INTERACTIVE=1 ./bootstrap.sh`
+- **Effect**: Skips all prompts and proceeds with defaults
+
 ## 🔐 Security Features
 
 - **GPG Verification**: eza packages are verified using GPG signatures
 - **Source Verification**: uv installer is validated against official Astral source
+- **Repository Verification**: Infisical setup script is validated before execution
+- **User-level npm**: Claude Code is installed to user directory, avoiding sudo npm
 - **Interactive Prompts**: Manual confirmation required for security-sensitive operations
 - **Transparent Installation**: Shows installer details before execution
 
@@ -108,9 +155,10 @@ For automated installations (CI/CD environments), you can use these environment 
 
 The script automatically updates your shell configuration files:
 
-- Adds `~/.local/bin` to PATH (for fd symlink)
-- Adds `~/.cargo/bin` to PATH (for uv)
+- Adds `~/.local/bin` to PATH (for fd symlink and uv)
+- Adds `~/.npm-global/bin` to PATH (for Claude Code)
 - Updates `.bashrc`, `.zshrc`, and `.profile` as needed
+- Configures npm to use user directory for global packages
 
 ## 🔄 Idempotency
 
@@ -131,7 +179,16 @@ The script is designed to be run multiple times safely:
 ### Automated/CI Installation
 
 ```bash
-EZA_SKIP_GPG_VERIFY=1 UV_INSTALL_SKIP_CONFIRM=1 ./bootstrap.sh
+# Skip all confirmations
+EZA_SKIP_GPG_VERIFY=1 \
+UV_INSTALL_SKIP_CONFIRM=1 \
+INFISICAL_SKIP_GPG_VERIFY=1 \
+CLAUDE_CODE_SKIP_CONFIRM=1 \
+TASKFILE_SKIP_CONFIRM=1 \
+./bootstrap.sh
+
+# Or use non-interactive mode
+NON_INTERACTIVE=1 ./bootstrap.sh
 ```
 
 ### Remote Installation with Environment Variables
@@ -161,9 +218,23 @@ bootstrap/bootstrap.sh \
 - For automated environments, use `EZA_SKIP_GPG_VERIFY=1`
 - Manually verify GPG key at <https://github.com/eza-community/eza>
 
+### Node.js Installation
+
+- The script automatically installs Node.js 20 LTS if not present or version < 18
+- Uses NodeSource repository for consistent installations
+
+### npm Permission Issues
+
+- Claude Code is installed to `~/.npm-global` to avoid permission issues
+- Never use `sudo npm install -g` as it can cause security risks
+- See [Claude Code troubleshooting](https://docs.anthropic.com/en/docs/claude-code/troubleshooting#linux-permission-issues)
+
 ## 🔗 Related Links
 
 - [eza documentation](https://github.com/eza-community/eza)
 - [fd-find documentation](https://github.com/sharkdp/fd)
 - [uv documentation](https://github.com/astral-sh/uv)
 - [ripgrep documentation](https://github.com/BurntSushi/ripgrep)
+- [Infisical documentation](https://infisical.com/docs/cli/overview)
+- [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/overview)
+- [Taskfile documentation](https://taskfile.dev/)

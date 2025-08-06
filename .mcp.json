@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "grep": {
-      "type": "http",
-      "url": "https://mcp.grep.app"
-    },
     "deepwiki": {
       "type": "http",
       "url": "https://mcp.deepwiki.com/mcp"
