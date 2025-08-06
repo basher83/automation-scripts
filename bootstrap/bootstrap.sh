@@ -535,33 +535,50 @@ if ! command -v claude &> /dev/null; then
         log_info "Node.js $(node --version) is already installed"
     fi
     
-    # Configure npm to use user directory for global packages
-    # This avoids permission issues and follows security best practices
-    log_info "Configuring npm for user-level global packages..."
-    
-    # Create npm global directory in user home
-    mkdir -p "$HOME/.npm-global"
-    
-    # Configure npm
-    npm config set prefix "$HOME/.npm-global"
-    
-    # Add to PATH if not already there
-    if [[ ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
-        export PATH="$HOME/.npm-global/bin:$PATH"
+    # Check if we're using nvm (common in GitHub Codespaces)
+    if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
+        log_info "Detected nvm environment (e.g., GitHub Codespaces)"
+        log_info "Using nvm's global npm directory instead of custom prefix"
         
-        # Persist PATH update for future sessions
-        log_info "Updating shell configuration for npm global packages..."
-        npm_path_line='export PATH="$HOME/.npm-global/bin:$PATH"'
+        # In nvm environments, global packages go to the nvm-managed location
+        # We don't need to set a custom prefix or modify PATH as nvm handles this
+        # Just ensure nvm is loaded for this session
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
         
-        # Update shell configuration files
-        for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-            if [ -f "$rc_file" ] && ! grep -q "\.npm-global/bin" "$rc_file"; then
-                echo "$npm_path_line" >> "$rc_file"
-                log_info "Added npm global path to $(basename "$rc_file")"
-            fi
-        done
+        # Get the global npm directory from nvm
+        NPM_GLOBAL_DIR="$(npm config get prefix)/bin"
+        log_info "npm global directory: $NPM_GLOBAL_DIR"
     else
-        log_info "npm global path already in PATH"
+        # Configure npm to use user directory for global packages
+        # This avoids permission issues and follows security best practices
+        log_info "Configuring npm for user-level global packages..."
+        
+        # Create npm global directory in user home
+        mkdir -p "$HOME/.npm-global"
+        
+        # Configure npm
+        npm config set prefix "$HOME/.npm-global"
+        
+        # Add to PATH if not already there
+        if [[ ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
+            export PATH="$HOME/.npm-global/bin:$PATH"
+            
+            # Persist PATH update for future sessions
+            log_info "Updating shell configuration for npm global packages..."
+            npm_path_line='export PATH="$HOME/.npm-global/bin:$PATH"'
+            
+            # Update shell configuration files
+            for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+                if [ -f "$rc_file" ] && ! grep -q "\.npm-global/bin" "$rc_file"; then
+                    echo "$npm_path_line" >> "$rc_file"
+                    log_info "Added npm global path to $(basename "$rc_file")"
+                fi
+            done
+        else
+            log_info "npm global path already in PATH"
+        fi
+        
+        NPM_GLOBAL_DIR="$HOME/.npm-global/bin"
     fi
     
     # Install Claude Code
@@ -574,7 +591,11 @@ if ! command -v claude &> /dev/null; then
         # Interactive mode - provide information
         echo ""
         echo "About to install Claude Code globally via npm."
-        echo "This will install to: $HOME/.npm-global"
+        if [ -n "${NVM_DIR:-}" ]; then
+            echo "This will install to: $(npm config get prefix)"
+        else
+            echo "This will install to: $HOME/.npm-global"
+        fi
         echo ""
         echo "Proceed with installation? [Y/n]"
         read -r response
@@ -585,23 +606,30 @@ if ! command -v claude &> /dev/null; then
         fi
     fi
     
-    # Force reload npm global bin path after installation
-    export PATH="$HOME/.npm-global/bin:$PATH"
+    # Force reload npm global bin path after installation (only if not using nvm)
+    if [ -z "${NVM_DIR:-}" ]; then
+        export PATH="$HOME/.npm-global/bin:$PATH"
+    fi
     
     # Also try to rehash if using zsh
-    if [ -n "$ZSH_VERSION" ]; then
+    if [ -n "${ZSH_VERSION:-}" ]; then
         hash -r 2>/dev/null || true
     fi
     
     # Verify installation with full path first (command is 'claude', not 'claude-code')
-    if [ -x "$HOME/.npm-global/bin/claude" ]; then
+    if [ -x "$NPM_GLOBAL_DIR/claude" ]; then
         log_info "✓ Claude Code installed successfully!"
         log_info "You can now use 'claude' command"
         
         # Double check if it's available in PATH
         if ! command -v claude &> /dev/null; then
-            log_warn "Note: You may need to restart your shell for the command to be available"
-            log_info "Or run: export PATH=\"\$HOME/.npm-global/bin:\$PATH\""
+            if [ -n "${NVM_DIR:-}" ]; then
+                log_warn "Note: You may need to reload nvm in your shell"
+                log_info "Run: source \$NVM_DIR/nvm.sh"
+            else
+                log_warn "Note: You may need to restart your shell for the command to be available"
+                log_info "Or run: export PATH=\"\$HOME/.npm-global/bin:\$PATH\""
+            fi
         fi
     else
         log_warn "Claude Code installation completed but binary not found"
