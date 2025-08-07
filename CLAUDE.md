@@ -11,7 +11,13 @@ This is a collection of automation scripts for DevOps and system administration 
 ### Script Validation and Execution
 
 ```bash
-# Validate all shell scripts for syntax errors
+# Validate all shell scripts with shellcheck (recommended)
+find . -name "*.sh" -type f -exec shellcheck {} \;
+
+# Run shellcheck with error severity only (matching CI)
+find . -name "*.sh" -type f -exec shellcheck -S error {} \;
+
+# Validate shell script syntax with bash
 find . -name "*.sh" -type f -exec bash -n {} \;
 
 # Make all scripts executable

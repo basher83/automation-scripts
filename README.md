@@ -278,11 +278,30 @@ fi
 trap cleanup EXIT
 ```
 
+### Development Environment
+
+This repository uses [mise](https://mise.jdx.dev/) for consistent tool versions:
+
+```bash
+# Initial setup
+mise trust && mise install
+
+# Run validation
+mise run validate    # ShellCheck all scripts
+mise run format      # Format with shfmt
+mise run test        # Run test suite
+```
+
+See [docs/development/MISE_GUIDE.md](docs/development/MISE_GUIDE.md) for complete documentation.
+
 ### Testing Scripts
 
 ```bash
 # Validate shell script syntax
 find . -name "*.sh" -type f -exec bash -n {} \;
+
+# Or use mise task
+mise run validate
 
 # Search codebase with ripgrep
 rg "pattern" --type sh

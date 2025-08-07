@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bootstrap Script for Modern CLI Tools
-# Installs eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile, and direnv on Debian/Ubuntu systems
+# Installs eza, fd-find, uv, ripgrep, shellcheck, infisical, claude-code, taskfile, direnv, and mise on Debian/Ubuntu systems
 # 
 # Usage:
 #   ./bootstrap.sh
@@ -115,7 +115,7 @@ print_error() {
 
 # Script header
 log_info "Bootstrap Script - Installing Modern CLI Tools"
-log_info "Tools: eza, fd-find, uv, ripgrep, infisical, claude-code, taskfile, direnv"
+log_info "Tools: eza, fd-find, uv, ripgrep, shellcheck, infisical, claude-code, taskfile, direnv, mise"
 print_info "Log file: $LOG_FILE"
 echo
 
@@ -473,6 +473,24 @@ if ! command -v rg &> /dev/null; then
     log_info "✓ ripgrep installed successfully!"
 else
     log_info "ripgrep is already installed"
+fi
+
+# Install shellcheck - shell script static analysis tool
+log_step "Checking shellcheck..."
+
+# Check if shellcheck is already installed
+if ! command -v shellcheck &> /dev/null; then
+    log_info "Installing shellcheck package..."
+    if $need_apt_update; then
+        log_info "Updating package index..."
+        sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+        need_apt_update=false
+    fi
+    sudo apt-get install -y shellcheck 2>&1 | tee -a "$LOG_FILE"
+    log_info "✓ shellcheck installed successfully!"
+else
+    shellcheck_version=$(shellcheck --version | grep version: | awk '{print $2}')
+    log_info "shellcheck is already installed. Version: $shellcheck_version"
 fi
 
 # Install Infisical CLI - secure secrets management
@@ -890,6 +908,71 @@ else
     log_info "direnv is already installed. Version: $direnv_version"
 fi
 
+# Install mise - development environment manager (polyglot tool version manager)
+log_step "Checking mise..."
+
+# Check if mise is already installed
+if ! command -v mise &> /dev/null; then
+    log_info "Installing mise..."
+    
+    # Install mise using the official installer
+    tmp_mise_installer=$(mktemp)
+    _tmp_files+=("$tmp_mise_installer")
+    
+    MISE_INSTALL_URL="https://mise.run"
+    
+    log_info "Downloading mise installer..."
+    if ! curl -fsSL "$MISE_INSTALL_URL" -o "$tmp_mise_installer"; then
+        log_error "Failed to download mise installer"
+        exit 1
+    fi
+    
+    # Run the installer
+    log_info "Running mise installer..."
+    if bash "$tmp_mise_installer" 2>&1 | tee -a "$LOG_FILE"; then
+        log_info "✓ mise installed successfully!"
+    else
+        log_error "Failed to install mise"
+        exit 1
+    fi
+    
+    # Add mise to PATH and shell configuration
+    export PATH="$HOME/.local/bin:$PATH"
+    
+    # Check if mise is now available
+    if command -v mise &> /dev/null; then
+        # Setup shell integration
+        mise_activate_bash='eval "$(mise activate bash)"'
+        mise_activate_zsh='eval "$(mise activate zsh)"'
+        
+        # Add to bash
+        if [ -f "$HOME/.bashrc" ] && ! grep -q "mise activate bash" "$HOME/.bashrc"; then
+            echo "" >> "$HOME/.bashrc"
+            echo "# mise hook" >> "$HOME/.bashrc"
+            echo "$mise_activate_bash" >> "$HOME/.bashrc"
+            log_info "Added mise activation to ~/.bashrc"
+        fi
+        
+        # Add to zsh
+        if [ -f "$HOME/.zshrc" ] && ! grep -q "mise activate zsh" "$HOME/.zshrc"; then
+            echo "" >> "$HOME/.zshrc"
+            echo "# mise hook" >> "$HOME/.zshrc"
+            echo "$mise_activate_zsh" >> "$HOME/.zshrc"
+            log_info "Added mise activation to ~/.zshrc"
+        fi
+        
+        log_info "Note: You need to restart your shell or run the appropriate activation command:"
+        log_info "  For bash: eval \"\$(mise activate bash)\""
+        log_info "  For zsh:  eval \"\$(mise activate zsh)\""
+    else
+        log_warn "mise installation completed but 'mise' command not found in PATH"
+        log_warn "You may need to add ~/.local/bin to your PATH"
+    fi
+else
+    mise_version=$(mise --version)
+    log_info "mise is already installed. Version: $mise_version"
+fi
+
 # Summary
 echo
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -899,10 +982,12 @@ log_info "  - eza: Modern replacement for ls"
 log_info "  - fd: User-friendly alternative to find"
 log_info "  - uv: Ultra-fast Python package installer"
 log_info "  - ripgrep: Lightning-fast recursive search"
+log_info "  - shellcheck: Shell script static analysis tool"
 log_info "  - infisical: Secure secrets management CLI"
 log_info "  - claude: AI-powered coding assistant (Claude Code)"
 log_info "  - taskfile: Modern task runner and build tool"
 log_info "  - direnv: Automatic environment variable loader"
+log_info "  - mise: Polyglot tool version manager"
 echo -e "${GREEN}✓ Log saved to: ${BOLD}$LOG_FILE${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo

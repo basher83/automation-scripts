@@ -14,3 +14,11 @@ _book
 *.epub
 *.mobi
 *.pdf
+
+
+# Ignore vscode AI rules
+.github/copilot-instructions.md
+
+# Mise local configuration
+.mise.local.toml
+.mise.local.yaml

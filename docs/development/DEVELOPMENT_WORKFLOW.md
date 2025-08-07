@@ -16,6 +16,8 @@ We use a two-tier development process that balances speed with compliance:
 - Identify what script you're modifying
 - Gather official documentation for any tools you're adding
 - Ensure you have Ubuntu/Debian installation instructions
+- Run `./bootstrap/bootstrap.sh` to install required development tools
+- Ensure mise is configured: `mise install` (installs tools from .mise.toml)
 
 ### 2. Copy the Checklist
 
@@ -52,6 +54,12 @@ Work through the checklist, checking only items relevant to your change:
 Run through the Final Validation section:
 
 ```bash
+# Run shellcheck for static analysis (REQUIRED)
+shellcheck your-script.sh
+
+# For CI consistency, check with error severity
+shellcheck -S error your-script.sh
+
 # Syntax check
 bash -n your-script.sh
 
@@ -65,6 +73,8 @@ ls -la /var/log/your-script-*.log
 ./your-script.sh
 ./your-script.sh
 ```
+
+**Note**: The pre-commit hook will automatically run shellcheck on staged shell scripts. If shellcheck is not installed, run `./bootstrap/bootstrap.sh` to install it.
 
 ### 6. Submit Your Work
 
@@ -93,6 +103,7 @@ Compare the actual changes against [CODING_STANDARDS.md](../../CODING_STANDARDS.
 
 #### Key Areas to Review:
 
+- **Static Analysis**: All scripts pass shellcheck validation
 - **Error Handling**: Proper use of `set -euo pipefail` and traps
 - **Logging**: Comprehensive logging to `/var/log/` with timestamps
 - **Idempotency**: Safe to run multiple times
@@ -103,6 +114,9 @@ Compare the actual changes against [CODING_STANDARDS.md](../../CODING_STANDARDS.
 ### 3. Test the Changes
 
 ```bash
+# Run shellcheck validation
+shellcheck modified-script.sh
+
 # Run the modified script
 ./modified-script.sh
 
@@ -193,6 +207,47 @@ fi
 - Verifies idempotency
 - Ensures non-interactive mode works
 - Confirms follows existing patterns
+
+## 🔧 Tool Version Management with Mise
+
+This repository uses [mise](https://mise.jdx.dev/) for consistent tool versions across all developers.
+
+### Quick Start
+
+```bash
+# Install and setup mise
+./bootstrap/bootstrap.sh  # Includes mise installation
+mise trust                # Trust project configuration  
+mise install              # Install all project tools
+mise run validate         # Verify setup works
+```
+
+### Common Commands
+
+```bash
+# Daily development
+mise run validate         # Run shellcheck on all scripts
+mise run format           # Format shell scripts
+mise run test            # Run comprehensive tests
+
+# Tool management
+mise ls                  # List installed tools
+mise upgrade             # Update tools to latest versions
+```
+
+### Documentation
+
+- **[Mise Guide](MISE_GUIDE.md)** - Comprehensive mise documentation
+- **[Quick Reference](MISE_QUICK_REFERENCE.md)** - Command cheat sheet
+
+### Local Overrides
+
+Create `.mise.local.toml` for personal tool preferences (gitignored):
+
+```toml
+[tools]
+node = "20"  # Override node version locally
+```
 
 ## 🎯 Benefits of This Workflow
 

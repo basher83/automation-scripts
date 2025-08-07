@@ -1,0 +1,117 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**.sh'
+      - '.github/workflows/shellcheck.yml'
+      - '.shellcheckrc'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.sh'
+      - '.github/workflows/shellcheck.yml'
+      - '.shellcheckrc'
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          
+      - name: Show ShellCheck version
+        run: shellcheck --version
+        
+      - name: Run ShellCheck on all shell scripts
+        run: |
+          echo "::group::Finding all shell scripts"
+          scripts=$(find . -type f -name "*.sh" -not -path "./.git/*" | sort)
+          echo "Found $(echo "$scripts" | wc -l) shell scripts"
+          echo "$scripts"
+          echo "::endgroup::"
+          
+          exit_code=0
+          for script in $scripts; do
+            echo "::group::Checking $script"
+            if shellcheck -S error "$script"; then
+              echo "✓ $script passed"
+            else
+              echo "✗ $script failed"
+              exit_code=1
+            fi
+            echo "::endgroup::"
+          done
+          
+          if [ $exit_code -eq 0 ]; then
+            echo "::notice::All shell scripts passed ShellCheck validation! ✓"
+          else
+            echo "::error::Some shell scripts failed ShellCheck validation"
+          fi
+          
+          exit $exit_code
+          
+      - name: ShellCheck summary
+        if: always()
+        run: |
+          echo "## ShellCheck Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          total=$(find . -type f -name "*.sh" -not -path "./.git/*" | wc -l)
+          echo "Total shell scripts scanned: **$total**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ All scripts passed ShellCheck validation" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some scripts failed validation. Please review the logs above." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  shellcheck-diff:
+    name: ShellCheck Changed Files
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            **.sh
+            
+      - name: Install ShellCheck
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          
+      - name: Run ShellCheck on changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          echo "Changed shell scripts:"
+          echo "${{ steps.changed-files.outputs.all_changed_files }}"
+          
+          exit_code=0
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "Checking $file..."
+            if ! shellcheck -S error "$file"; then
+              exit_code=1
+            fi
+          done
+          
+          exit $exit_code

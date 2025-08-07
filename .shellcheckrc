@@ -1,0 +1,31 @@
+# ShellCheck configuration for automation-scripts repository
+# https://www.shellcheck.net/wiki/Ignore
+
+# Set minimum severity level
+# error, warning, info, style
+severity=warning
+
+# Enable optional checks
+enable=all
+
+# Disable specific checks that don't apply to our use case
+# SC2312: Consider invoking this command separately to avoid masking its return value
+# (We use pipefail consistently so this is safe)
+disable=SC2312
+
+# Shell dialect (bash for all our scripts)
+shell=bash
+
+# External sources
+# Allow shellcheck to follow source statements
+external-sources=true
+
+# Common excludes for our patterns:
+# SC1091: Not following sourced files (when they're runtime determined)
+# SC2034: Variable appears unused (often used in sourced scripts)
+# SC2155: Declare and assign separately to avoid masking return values (style preference)
+# Add these as needed based on codebase patterns
+
+# Note: Individual scripts can override with inline directives:
+# shellcheck disable=SC2034  # for specific lines
+# shellcheck source=/dev/null # when source path is dynamic
