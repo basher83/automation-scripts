@@ -242,7 +242,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
     log_info "Removing PVE exporter configuration..."
     
     # Remove only PVE-specific files
-    local pve_files=(
+    pve_files=(
         "$CONFIG_DIR/pve.yml"
         "$CONFIG_DIR/pve.yml.backup"*
     )

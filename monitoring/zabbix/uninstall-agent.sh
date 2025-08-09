@@ -505,7 +505,7 @@ cleanup_files() {
     )
     
     for known_repo in "${known_repos[@]}"; do
-        if [[ -f "$known_repo" ]] && [[ ! " ${repo_files[@]} " =~ " ${known_repo} " ]]; then
+        if [[ -f "$known_repo" ]] && [[ ! " ${repo_files[*]} " =~ " ${known_repo} " ]]; then
             repo_files+=("$known_repo")
         fi
     done
