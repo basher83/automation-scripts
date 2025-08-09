@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Prometheus PVE Exporter Bootstrap Script (Improved)
-# 
+#
 # This script installs and configures prometheus-pve-exporter on a Proxmox host
 # using a Python virtual environment for production stability.
 #
@@ -15,7 +15,7 @@
 #   ./install-pve-exporter.sh [--verify-ssl] [--privsep auto|0|1]
 #
 
-set -euo pipefail  # Exit on error, undefined variables, pipe failures
+set -euo pipefail # Exit on error, undefined variables, pipe failures
 
 # Configuration
 USER="prometheus"
@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
             PRIVSEP="$2"
             shift 2
             ;;
-        -h|--help)
+        -h | --help)
             echo "Usage: $0 [--verify-ssl] [--privsep auto|0|1]"
             echo "  --verify-ssl    Enable SSL certificate verification (default: disabled)"
             echo "  --privsep      Set privilege separation mode (default: auto-detect)"
@@ -75,12 +75,12 @@ log_error() {
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
-   log_error "This script must be run as root"
-   exit 1
+    log_error "This script must be run as root"
+    exit 1
 fi
 
 # Check if running on Proxmox
-if ! command -v pveum &> /dev/null; then
+if ! command -v pveum &>/dev/null; then
     log_error "This script must be run on a Proxmox VE host"
     exit 1
 fi
@@ -89,13 +89,13 @@ fi
 detect_privsep_mode() {
     local pve_version
     pve_version=$(pveversion | grep -oP 'pve-manager/\K[0-9]+\.[0-9]+' || echo "0.0")
-    
+
     log_info "Detected PVE version: $pve_version"
-    
+
     # Known compatibility issues:
     # - Some versions of prometheus-pve-exporter have issues with privsep=1
     # - This appears to be related to how the exporter handles token authentication
-    
+
     # For now, default to privsep=0 for compatibility
     # This can be overridden with --privsep 1 if needed
     echo "0"
@@ -107,20 +107,20 @@ create_token_securely() {
     local token_name="$2"
     local privsep_value="$3"
     local temp_file
-    
+
     # Create secure temporary file in memory
     temp_file=$(mktemp -p /dev/shm pve-token.XXXXXX)
     chmod 600 "$temp_file"
-    
+
     # Create token and capture output
-    if pveum user token add "$user" "$token_name" --privsep "$privsep_value" > "$temp_file" 2>&1; then
+    if pveum user token add "$user" "$token_name" --privsep "$privsep_value" >"$temp_file" 2>&1; then
         # Extract token value from output (skip header row, get actual token row)
         local token_value
         token_value=$(grep "│ value" "$temp_file" | grep -v "│ key" | awk -F'│' '{print $3}' | xargs)
-        
+
         # Securely remove temporary file
         shred -u "$temp_file" 2>/dev/null || rm -f "$temp_file"
-        
+
         if [[ -n "$token_value" ]]; then
             echo "$token_value"
             return 0
@@ -141,8 +141,8 @@ wait_for_service_state() {
     local service="$1"
     local desired_state="$2"
     local timeout="${3:-30}"
-    
-    for ((i=0; i<timeout; i++)); do
+
+    for ((i = 0; i < timeout; i++)); do
         if systemctl is-active --quiet "$service"; then
             [[ "$desired_state" == "active" ]] && return 0
         else
@@ -248,7 +248,7 @@ fi
 
 # Create configuration file
 log_info "Creating configuration file: $CONFIG_FILE"
-cat <<EOF > $CONFIG_FILE
+cat <<EOF >$CONFIG_FILE
 default:
   user: ${USERNAME}
   token_name: ${TOKEN_NAME}
@@ -262,7 +262,7 @@ chown $USER:$USER $CONFIG_FILE
 
 # Create systemd service
 log_info "Creating systemd service"
-cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
+cat <<EOF >/etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
 Description=Prometheus exporter for Proxmox VE
 Documentation=https://github.com/prometheus-pve/prometheus-pve-exporter
@@ -311,11 +311,11 @@ fi
 
 # Test the exporter
 log_info "Testing exporter endpoint..."
-sleep 2  # Give the exporter a moment to initialize
+sleep 2 # Give the exporter a moment to initialize
 
 if curl -s -f -o /dev/null "http://localhost:9221/"; then
     log_info "Exporter is responding correctly"
-    
+
     # Test actual metrics endpoint
     if curl -s -f "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
         log_info "Metrics are being collected successfully!"
@@ -372,7 +372,7 @@ LOG_FILE="/var/log/${SERVICE_NAME}-install.log"
     echo "Token: ${USERNAME}!${TOKEN_NAME}"
     echo "Privsep: $PRIVSEP"
     echo "SSL Verify: $VERIFY_SSL"
-} >> $LOG_FILE
+} >>$LOG_FILE
 chown $USER:$USER $LOG_FILE
 chmod 640 $LOG_FILE
 

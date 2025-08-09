@@ -52,25 +52,25 @@ log_debug() {
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-       log_error "This script must be run as root"
-       exit 1
+        log_error "This script must be run as root"
+        exit 1
     fi
 }
 
 # Check for required commands
 check_requirements() {
     local missing_cmds=()
-    
+
     # Check for curl (required for testing)
     if ! command -v curl &>/dev/null; then
         missing_cmds+=("curl")
     fi
-    
+
     # Check for pveum (required for token management)
     if ! command -v pveum &>/dev/null; then
         missing_cmds+=("pveum (Proxmox VE)")
     fi
-    
+
     if [[ ${#missing_cmds[@]} -gt 0 ]]; then
         log_error "Missing required commands: ${missing_cmds[*]}"
         log_error "Please install the missing dependencies"
@@ -84,15 +84,15 @@ create_token_securely() {
     local token_name="$2"
     local privsep_value="$3"
     local temp_file
-    
+
     temp_file=$(mktemp -p /dev/shm pve-token.XXXXXX)
     chmod 600 "$temp_file"
-    
-    if pveum user token add "$user" "$token_name" --privsep "$privsep_value" > "$temp_file" 2>&1; then
+
+    if pveum user token add "$user" "$token_name" --privsep "$privsep_value" >"$temp_file" 2>&1; then
         local token_value
         token_value=$(grep "│ value" "$temp_file" | grep -v "│ key" | awk -F'│' '{print $3}' | xargs)
         shred -u "$temp_file" 2>/dev/null || rm -f "$temp_file"
-        
+
         if [[ -n "$token_value" ]]; then
             echo "$token_value"
             return 0
@@ -112,13 +112,13 @@ show_status() {
     echo "Prometheus PVE Exporter Status"
     echo "========================================="
     echo ""
-    
+
     # Service status
     echo "Service Status:"
     if systemctl is-active --quiet $SERVICE_NAME; then
         echo -e "  ${GREEN}● Service is running${NC}"
         echo "  PID: $(systemctl show -p MainPID --value $SERVICE_NAME)"
-        
+
         # Show memory if numfmt is available
         local mem_value
         mem_value=$(systemctl show -p MemoryCurrent --value $SERVICE_NAME)
@@ -129,12 +129,12 @@ show_status() {
         echo -e "  ${RED}● Service is not running${NC}"
     fi
     echo ""
-    
+
     # Token status
     echo "Token Information:"
     if pveum user token list $USERNAME 2>/dev/null | grep -q "$TOKEN_NAME"; then
         echo -e "  ${GREEN}✓ Token exists${NC}: ${USERNAME}!${TOKEN_NAME}"
-        
+
         # Check token permissions
         local token_perms
         token_perms=$(pveum acl list --path / | grep "${USERNAME}!${TOKEN_NAME}" || true)
@@ -147,7 +147,7 @@ show_status() {
         echo -e "  ${RED}✗ Token does not exist${NC}"
     fi
     echo ""
-    
+
     # Config file status
     echo "Configuration:"
     if [[ -f "$CONFIG_FILE" ]]; then
@@ -159,12 +159,12 @@ show_status() {
         echo -e "  ${RED}✗ Config file missing${NC}"
     fi
     echo ""
-    
+
     # Test endpoint
     echo "Endpoint Test:"
     if curl -s -f -o /dev/null --connect-timeout 5 --max-time 10 "http://localhost:9221/"; then
         echo -e "  ${GREEN}✓ Base endpoint responding${NC}"
-        
+
         # Test metrics
         if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
             echo -e "  ${GREEN}✓ Metrics collection working${NC}"
@@ -181,63 +181,63 @@ show_status() {
 # Function to recreate token
 recreate_token() {
     check_root
-    
+
     local privsep="${1:-0}"
-    
+
     # Validate privsep value
     if [[ ! "$privsep" =~ ^[01]$ ]]; then
         log_error "Invalid privilege separation value: $privsep (must be 0 or 1)"
         return 1
     fi
-    
+
     log_info "Recreating token for $USERNAME"
-    
+
     # Stop service
     log_info "Stopping service..."
     systemctl stop $SERVICE_NAME
-    
+
     # Remove existing token if exists
     if pveum user token list $USERNAME 2>/dev/null | grep -q "$TOKEN_NAME"; then
         log_info "Removing existing token..."
         pveum user token remove $USERNAME $TOKEN_NAME
     fi
-    
+
     # Create new token
     log_info "Creating new token with privsep=$privsep..."
     local token_value
     token_value=$(create_token_securely "$USERNAME" "$TOKEN_NAME" "$privsep")
-    
+
     if [[ -z "$token_value" ]]; then
         log_error "Failed to create token"
         return 1
     fi
-    
+
     # Grant permissions
     log_info "Granting PVEAuditor role to token..."
     pveum acl modify / --tokens ${USERNAME}!${TOKEN_NAME} --roles PVEAuditor
-    
+
     # Update config file
     log_info "Updating configuration..."
     if [[ -f "$CONFIG_FILE" ]]; then
         # Backup current config
         cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
-        
+
         # Update token value in config (use | as delimiter to avoid issues with / in token)
         sed -i "s|token_value:.*|token_value: ${token_value}|" "$CONFIG_FILE"
     else
         log_error "Config file not found: $CONFIG_FILE"
         return 1
     fi
-    
+
     # Start service
     log_info "Starting service..."
     systemctl start $SERVICE_NAME
-    
+
     # Wait and test
     sleep 3
     if systemctl is-active --quiet $SERVICE_NAME; then
         log_info "Service restarted successfully"
-        
+
         # Test metrics
         if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" | grep -q "pve_up"; then
             log_info "Token recreation successful! Metrics are working."
@@ -257,7 +257,7 @@ test_exporter() {
     echo "Testing Prometheus PVE Exporter"
     echo "========================================="
     echo ""
-    
+
     # Test base endpoint
     log_info "Testing base endpoint..."
     if curl -s -f --connect-timeout 5 --max-time 10 "http://localhost:9221/" | head -5; then
@@ -266,12 +266,12 @@ test_exporter() {
         echo -e "\n${RED}✗ Base endpoint failed${NC}\n"
         return 1
     fi
-    
+
     # Test metrics endpoint
     log_info "Testing metrics endpoint..."
     local metrics_output
     metrics_output=$(curl -s --connect-timeout 5 --max-time 10 "http://localhost:9221/pve?target=localhost" 2>&1)
-    
+
     if echo "$metrics_output" | grep -q "pve_up"; then
         echo -e "${GREEN}✓ Metrics collection working${NC}"
         echo ""
@@ -282,7 +282,7 @@ test_exporter() {
         echo ""
         echo "Response:"
         echo "$metrics_output" | head -20
-        
+
         # Check for common errors
         if echo "$metrics_output" | grep -q "401"; then
             echo ""
@@ -296,22 +296,22 @@ test_exporter() {
 # Function to show logs
 show_logs() {
     local lines="${1:-50}"
-    
+
     echo "========================================="
     echo "Recent Service Logs (last $lines lines)"
     echo "========================================="
     echo ""
-    
+
     journalctl -u $SERVICE_NAME -n "$lines" --no-pager
 }
 
 # Function to restart service
 restart_service() {
     check_root
-    
+
     log_info "Restarting $SERVICE_NAME..."
     systemctl restart $SERVICE_NAME
-    
+
     sleep 2
     if systemctl is-active --quiet $SERVICE_NAME; then
         log_info "Service restarted successfully"
@@ -362,7 +362,7 @@ case "${1:-help}" in
     restart)
         restart_service
         ;;
-    help|-h|--help)
+    help | -h | --help)
         usage
         ;;
     *)

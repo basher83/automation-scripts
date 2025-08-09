@@ -2,7 +2,7 @@
 
 # Consul Prometheus Exporter Setup Script
 # Creates Consul ACL policies and tokens for Prometheus/Netdata scraping
-# 
+#
 # Usage:
 #   ./prometheus-consul-exporter.sh [OPTIONS]
 #
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             CONSUL_ADDR="$2"
             shift 2
             ;;
-        --help|-h)
+        --help | -h)
             grep "^#" "$0" | grep -E "^# (Usage|Options|Requirements|Infisical)" | sed 's/^# //'
             exit 0
             ;;
@@ -88,48 +88,48 @@ fi
 log_info() {
     local message="$*"
     echo -e "${GREEN}[INFO]${NC} $message"
-    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $message" >> "$LOG_FILE" || true
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $message" >>"$LOG_FILE" || true
 }
 
 log_warn() {
     local message="$*"
     echo -e "${YELLOW}[WARN]${NC} $message"
-    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $message" >> "$LOG_FILE" || true
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $message" >>"$LOG_FILE" || true
 }
 
 log_error() {
     local message="$*"
     echo -e "${RED}[ERROR]${NC} $message" >&2
-    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $message" >> "$LOG_FILE" || true
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $message" >>"$LOG_FILE" || true
 }
 
 log_success() {
     local message="$*"
     echo -e "${BLUE}[SUCCESS]${NC} $message"
-    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $message" >> "$LOG_FILE" || true
+    [[ -w "$LOG_FILE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $message" >>"$LOG_FILE" || true
 }
 
 # Function to check prerequisites
 check_prerequisites() {
     local missing_tools=()
-    
+
     # Check required tools
-    if ! command -v consul &> /dev/null; then
+    if ! command -v consul &>/dev/null; then
         missing_tools+=("consul")
     fi
-    
-    if ! command -v infisical &> /dev/null; then
+
+    if ! command -v infisical &>/dev/null; then
         missing_tools+=("infisical")
     fi
-    
-    if ! command -v jq &> /dev/null; then
+
+    if ! command -v jq &>/dev/null; then
         missing_tools+=("jq")
     fi
-    
-    if ! command -v curl &> /dev/null; then
+
+    if ! command -v curl &>/dev/null; then
         missing_tools+=("curl")
     fi
-    
+
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         log_info "Install missing tools:"
@@ -166,19 +166,19 @@ get_consul_token() {
         log_success "Token configured from environment"
         return 0
     fi
-    
+
     log_info "Retrieving Consul management token from Infisical..."
-    
+
     # Check if already authenticated to Infisical by testing if we can get the specific secret
     # We'll use the actual secret retrieval as the auth check
     log_info "Checking Infisical authentication..."
-    
+
     # Get token from Infisical (capture stderr to check for login issues)
     local infisical_output
     local infisical_error
     infisical_output=$(infisical secrets get CONSUL_MASTER_TOKEN --path="/apollo-13/consul" --projectId="$INFISICAL_PROJECT_ID" --plain 2>&1)
     infisical_error=$?
-    
+
     # Check if the output contains login error messages
     if echo "$infisical_output" | grep -q "login session\|trigger login flow\|infisical login"; then
         log_error "Infisical session has expired or is invalid"
@@ -189,17 +189,17 @@ get_consul_token() {
         log_info "  3. Download and run: wget <script-url> && sudo ./$(basename "$0")"
         exit 1
     fi
-    
+
     # Extract just the token value if successful
     if [[ $infisical_error -eq 0 ]]; then
         CONSUL_MASTER_TOKEN=$(echo "$infisical_output" | tail -1)
     else
         CONSUL_MASTER_TOKEN=""
     fi
-    
+
     # Trim any whitespace, newlines, or carriage returns from the token
     CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -d '\r\n' | xargs)
-    
+
     # Additional sanitization - remove any non-printable characters
     CONSUL_MASTER_TOKEN=$(echo -n "$CONSUL_MASTER_TOKEN" | tr -cd '[:print:]')
 
@@ -212,14 +212,14 @@ get_consul_token() {
         log_info "  4. Incorrect projectId: $INFISICAL_PROJECT_ID"
         exit 1
     fi
-    
+
     # Export for consul commands
     export CONSUL_HTTP_TOKEN="$CONSUL_MASTER_TOKEN"
     export CONSUL_HTTP_ADDR="$CONSUL_ADDR"
-    
+
     # Debug: Log token length (but not the token itself)
     log_info "Token length: ${#CONSUL_MASTER_TOKEN} characters"
-    
+
     log_success "Successfully retrieved Consul management token"
 }
 
@@ -231,7 +231,7 @@ policy_exists() {
 # Function to create ACL policy
 create_acl_policy() {
     log_info "Creating Consul ACL policy: $POLICY_NAME"
-    
+
     # Check if policy already exists
     if policy_exists; then
         if [[ "$FORCE_MODE" == "true" ]]; then
@@ -242,7 +242,7 @@ create_acl_policy() {
             return 0
         fi
     fi
-    
+
     # Create the policy
     consul acl policy create -name "$POLICY_NAME" -rules - <<EOF
 # Policy for Prometheus/Netdata scraping
@@ -260,42 +260,42 @@ service_prefix "" {
   policy = "read"
 }
 EOF
-    
+
     log_success "ACL policy '$POLICY_NAME' created successfully"
 }
 
 # Function to create ACL token
 create_acl_token() {
     log_info "Creating Consul ACL token for Prometheus scraping..."
-    
+
     # Create the token
     local token_output
     token_output=$(consul acl token create \
         -description "$TOKEN_DESCRIPTION" \
         -policy-name "$POLICY_NAME" \
         -format json)
-    
+
     # Extract the token
     local secret_id
     secret_id=$(echo "$token_output" | jq -r '.SecretID')
-    
+
     if [[ -z "$secret_id" || "$secret_id" == "null" ]]; then
         log_error "Failed to create ACL token"
         exit 1
     fi
-    
+
     # Save token info (with restricted permissions)
     {
         echo "Token created at: $(date)"
         echo "Description: $TOKEN_DESCRIPTION"
         echo "Policy: $POLICY_NAME"
         echo "SecretID: $secret_id"
-    } >> "$LOG_FILE"
+    } >>"$LOG_FILE"
     chmod 640 "$LOG_FILE"
-    
+
     log_success "ACL token created successfully"
     log_info "Token SecretID saved to: $LOG_FILE (restricted access)"
-    
+
     # Return the token
     echo "$secret_id"
 }
@@ -303,9 +303,9 @@ create_acl_token() {
 # Function to configure Netdata
 configure_netdata() {
     local token="$1"
-    
+
     log_info "Configuring Netdata Consul collector..."
-    
+
     # Find Netdata configuration directory
     local netdata_dir
     if [[ -d "/etc/netdata" ]]; then
@@ -317,26 +317,26 @@ configure_netdata() {
         log_info "Netdata may not be installed or is in a non-standard location"
         return 1
     fi
-    
+
     # Create go.d directory if it doesn't exist
     local god_dir="$netdata_dir/go.d"
     if [[ ! -d "$god_dir" ]]; then
         log_info "Creating go.d configuration directory..."
         mkdir -p "$god_dir"
     fi
-    
+
     local consul_conf="$god_dir/consul.conf"
-    
+
     # Backup existing configuration
     if [[ -f "$consul_conf" ]]; then
         local backup_file="${consul_conf}.backup.$(date +%Y%m%d_%H%M%S)"
         log_info "Backing up existing configuration to: $backup_file"
         cp "$consul_conf" "$backup_file"
     fi
-    
+
     # Write new configuration
     log_info "Writing Netdata Consul configuration..."
-    cat > "$consul_conf" <<EOF
+    cat >"$consul_conf" <<EOF
 # Netdata Consul collector configuration
 # Generated by $SCRIPT_NAME on $(date)
 
@@ -354,17 +354,17 @@ jobs:
     collect_node_metadata: yes
     collect_service_metadata: yes
 EOF
-    
+
     # Set appropriate permissions
     chmod 640 "$consul_conf"
     if command -v netdata &>/dev/null; then
         local netdata_user=$(ps aux | grep -m1 '[n]etdata' | awk '{print $1}' || echo "netdata")
         chown "$netdata_user:$netdata_user" "$consul_conf" 2>/dev/null || true
     fi
-    
+
     log_success "Netdata configuration updated"
     log_info "Configuration file: $consul_conf"
-    
+
     # Restart Netdata if it's running
     if systemctl is-active --quiet netdata 2>/dev/null; then
         log_info "Restarting Netdata service..."
@@ -379,7 +379,7 @@ EOF
 # Function to verify Consul connectivity
 verify_consul() {
     log_info "Verifying Consul connectivity..."
-    
+
     # Test with a simple API call
     if ! curl -sf "${CONSUL_ADDR}/v1/status/leader" >/dev/null; then
         log_error "Cannot connect to Consul at $CONSUL_ADDR"
@@ -390,7 +390,7 @@ verify_consul() {
         fi
         exit 1
     fi
-    
+
     log_success "Successfully connected to Consul"
 }
 
@@ -399,7 +399,7 @@ main() {
     log_info "Starting Consul Prometheus exporter setup..."
     log_info "Script: $SCRIPT_NAME"
     log_info "Consul address: $CONSUL_ADDR"
-    
+
     # Check if running as root (needed for Netdata config and log file)
     if [[ $EUID -ne 0 ]] && [[ "$SKIP_NETDATA" != "true" ]]; then
         log_error "This script must be run as root to configure Netdata"
@@ -407,7 +407,7 @@ main() {
         log_info "For remote execution: curl -fsSL <url> | sudo bash"
         exit 1
     fi
-    
+
     # Initialize log file after root check
     if [[ $EUID -eq 0 ]]; then
         mkdir -p "$(dirname "$LOG_FILE")"
@@ -417,7 +417,7 @@ main() {
     else
         log_warn "Not running as root - log file creation skipped"
     fi
-    
+
     # Confirmation prompt
     if [[ "$NON_INTERACTIVE" != "true" ]] && [[ -t 0 ]]; then
         echo
@@ -435,17 +435,17 @@ main() {
             exit 0
         fi
     fi
-    
+
     # Run setup steps
     check_prerequisites
     get_consul_token
     verify_consul
     create_acl_policy
-    
+
     # Create token
     local prometheus_token
     prometheus_token=$(create_acl_token)
-    
+
     # Configure Netdata if not skipped
     if [[ "$SKIP_NETDATA" != "true" ]]; then
         configure_netdata "$prometheus_token"
@@ -453,7 +453,7 @@ main() {
         log_info "Skipping Netdata configuration (--skip-netdata specified)"
         log_info "Token created: Use the SecretID from $LOG_FILE for manual configuration"
     fi
-    
+
     # Summary
     echo
     log_success "🎉 Consul Prometheus exporter setup complete!"

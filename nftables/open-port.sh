@@ -90,7 +90,7 @@ log_info() {
     local message="$*"
     echo -e "${GREEN}[INFO]${NC} $message"
     if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $message" >> "$LOG_FILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $message" >>"$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -98,7 +98,7 @@ log_warn() {
     local message="$*"
     echo -e "${YELLOW}[WARN]${NC} $message"
     if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: $message" >> "$LOG_FILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: $message" >>"$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -106,7 +106,7 @@ log_error() {
     local message="$*"
     echo -e "${RED}[ERROR]${NC} $message" >&2
     if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $message" >> "$LOG_FILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $message" >>"$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -114,7 +114,7 @@ log_step() {
     local message="$*"
     echo -e "${BLUE}[STEP]${NC} $message"
     if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP: $message" >> "$LOG_FILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP: $message" >>"$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -122,7 +122,7 @@ log_success() {
     local message="$*"
     echo -e "${GREEN}[SUCCESS]${NC} $message"
     if [[ -w "$LOG_FILE" ]] || [[ -w "$(dirname "$LOG_FILE")" ]]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $message" >> "$LOG_FILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $message" >>"$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -144,13 +144,13 @@ handle_error() {
     local exit_code=$1
     local line_number=$2
     log_error "Script failed at line $line_number with exit code $exit_code"
-    
+
     # Check if we have a backup to suggest restore
     if [[ -d "$BACKUP_DIR" ]] && ls -1 "$BACKUP_DIR"/nftables-backup-*.conf 2>/dev/null | grep -q .; then
         log_warn "Recent backups available in $BACKUP_DIR"
         log_warn "To restore, run: sudo cp $BACKUP_DIR/nftables-backup-TIMESTAMP.conf $CONFIG_FILE && sudo systemctl restart nftables"
     fi
-    
+
     exit "$exit_code"
 }
 
@@ -193,31 +193,31 @@ show_usage() {
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -p|--port)
+            -p | --port)
                 PORT="$2"
                 shift 2
                 ;;
-            -P|--protocol)
+            -P | --protocol)
                 PROTOCOL="$2"
                 shift 2
                 ;;
-            -c|--chain)
+            -c | --chain)
                 CHAIN="$2"
                 shift 2
                 ;;
-            -t|--table)
+            -t | --table)
                 TABLE="$2"
                 shift 2
                 ;;
-            -f|--family)
+            -f | --family)
                 FAMILY="$2"
                 shift 2
                 ;;
-            -r|--remove)
+            -r | --remove)
                 ACTION="remove"
                 shift
                 ;;
-            -b|--backup-only)
+            -b | --backup-only)
                 BACKUP_ONLY=true
                 shift
                 ;;
@@ -229,7 +229,7 @@ parse_args() {
                 DRY_RUN=true
                 shift
                 ;;
-            -h|--help)
+            -h | --help)
                 show_usage
                 exit 0
                 ;;
@@ -249,13 +249,13 @@ validate_inputs() {
         log_error "Invalid port number: $PORT (must be 1-65535)"
         exit 1
     fi
-    
+
     # Validate protocol
     if [[ "$PROTOCOL" != "tcp" ]] && [[ "$PROTOCOL" != "udp" ]]; then
         log_error "Invalid protocol: $PROTOCOL (must be tcp or udp)"
         exit 1
     fi
-    
+
     # Validate family
     if [[ "$FAMILY" != "inet" ]] && [[ "$FAMILY" != "ip" ]] && [[ "$FAMILY" != "ip6" ]]; then
         log_error "Invalid address family: $FAMILY (must be inet, ip, or ip6)"
@@ -273,12 +273,12 @@ check_root() {
 
 # Check if nftables is installed
 check_nftables() {
-    if ! command -v nft &> /dev/null; then
+    if ! command -v nft &>/dev/null; then
         log_error "nftables is not installed. Please install it first:"
         log_error "  sudo apt update && sudo apt install nftables"
         exit 1
     fi
-    
+
     # Check if nftables service exists (non-fatal if missing)
     if systemctl list-unit-files 2>/dev/null | grep -q "^nftables\.service"; then
         # Service exists, check if it's running
@@ -296,7 +296,7 @@ check_nftables() {
         log_warn "nftables service not found, but nft command is available"
         log_info "Rules will be applied but may not persist after reboot without service"
     fi
-    
+
     # Test if we can actually use nft
     if ! nft list tables &>/dev/null; then
         log_error "Cannot access nftables. Are you running as root?"
@@ -317,19 +317,19 @@ ensure_backup_dir() {
 create_backup() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_DIR/nftables-backup-${timestamp}.conf"
-    
+
     log_step "Creating backup of current ruleset..."
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would create backup at: $backup_file"
         return 0
     fi
-    
+
     # Save current ruleset
-    if nft list ruleset > "$backup_file" 2>/dev/null; then
+    if nft list ruleset >"$backup_file" 2>/dev/null; then
         chmod 600 "$backup_file"
         log_success "Backup created: $backup_file"
-        
+
         # Keep only last 10 backups
         local backup_count=$(ls -1 "$BACKUP_DIR"/nftables-backup-*.conf 2>/dev/null | wc -l)
         if [[ $backup_count -gt 10 ]]; then
@@ -349,17 +349,17 @@ rule_exists() {
     local chain="$3"
     local table="$4"
     local family="$5"
-    
+
     # Check if the table and chain exist first
     if ! nft list table "$family" "$table" &>/dev/null; then
         return 1
     fi
-    
+
     # Check for the specific rule
     if nft list chain "$family" "$table" "$chain" 2>/dev/null | grep -qE "${protocol}[[:space:]]+dport[[:space:]]+${port}[[:space:]]+accept"; then
         return 0
     fi
-    
+
     return 1
 }
 
@@ -370,15 +370,15 @@ add_rule() {
     local chain="$3"
     local table="$4"
     local family="$5"
-    
+
     log_step "Adding rule to allow $protocol port $port..."
-    
+
     # Check if rule already exists
     if rule_exists "$port" "$protocol" "$chain" "$table" "$family"; then
         log_warn "Rule already exists for $protocol port $port"
         return 0
     fi
-    
+
     # Ensure table exists
     if ! nft list table "$family" "$table" &>/dev/null; then
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -388,7 +388,7 @@ add_rule() {
             nft add table "$family" "$table"
         fi
     fi
-    
+
     # Ensure chain exists
     if ! nft list chain "$family" "$table" "$chain" &>/dev/null; then
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -398,11 +398,11 @@ add_rule() {
             nft add chain "$family" "$table" "$chain" '{ type filter hook input priority 0; policy accept; }'
         fi
     fi
-    
+
     # Add the rule at the beginning of the chain
     # insert rule adds at the beginning by default (no position parameter needed)
     local cmd="nft insert rule $family $table $chain $protocol dport $port accept"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would execute: $cmd"
     else
@@ -422,29 +422,29 @@ remove_rule() {
     local chain="$3"
     local table="$4"
     local family="$5"
-    
+
     log_step "Removing rule for $protocol port $port..."
-    
+
     # Check if rule exists
     if ! rule_exists "$port" "$protocol" "$chain" "$table" "$family"; then
         log_warn "Rule does not exist for $protocol port $port"
         return 0
     fi
-    
+
     # Get rule handle
-    local handle=$(nft -a list chain "$family" "$table" "$chain" 2>/dev/null | \
-        grep -E "${protocol}[[:space:]]+dport[[:space:]]+${port}[[:space:]]+accept" | \
-        grep -oE 'handle[[:space:]]+[0-9]+' | \
-        awk '{print $2}' | \
+    local handle=$(nft -a list chain "$family" "$table" "$chain" 2>/dev/null |
+        grep -E "${protocol}[[:space:]]+dport[[:space:]]+${port}[[:space:]]+accept" |
+        grep -oE 'handle[[:space:]]+[0-9]+' |
+        awk '{print $2}' |
         head -1)
-    
+
     if [[ -z "$handle" ]]; then
         log_error "Could not find rule handle"
         return 1
     fi
-    
+
     local cmd="nft delete rule $family $table $chain handle $handle"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would execute: $cmd"
     else
@@ -460,21 +460,21 @@ remove_rule() {
 # Save ruleset to config file
 save_ruleset() {
     log_step "Saving ruleset to $CONFIG_FILE..."
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would save ruleset to $CONFIG_FILE"
         return 0
     fi
-    
+
     # Export ruleset directly to config file
-    if ! nft list ruleset > "$CONFIG_FILE" 2>/dev/null; then
+    if ! nft list ruleset >"$CONFIG_FILE" 2>/dev/null; then
         log_error "Failed to export ruleset"
         return 1
     fi
-    
+
     # Set proper permissions
     chmod 644 "$CONFIG_FILE"
-    
+
     log_success "Ruleset saved to $CONFIG_FILE"
 }
 
@@ -486,12 +486,12 @@ enable_service() {
         log_info "You may need to manually configure nftables to start at boot"
         return 0
     fi
-    
+
     if systemctl is-enabled --quiet nftables 2>/dev/null; then
         log_info "nftables service is already enabled"
     else
         log_step "Enabling nftables service..."
-        
+
         if [[ "$DRY_RUN" == "true" ]]; then
             log_info "[DRY RUN] Would enable nftables service"
         else
@@ -504,7 +504,7 @@ enable_service() {
 # Display current rules for verification
 show_rules() {
     log_step "Current rules in $FAMILY $TABLE $CHAIN:"
-    
+
     if nft list chain "$FAMILY" "$TABLE" "$CHAIN" &>/dev/null; then
         nft -a list chain "$FAMILY" "$TABLE" "$CHAIN" | sed 's/^/  /'
     else
@@ -516,49 +516,49 @@ show_rules() {
 main() {
     # Parse arguments first (before setting up colors)
     parse_args "$@"
-    
+
     # Setup colors based on parsed arguments
     setup_colors
-    
+
     # Start logging
     log_info "Starting nftables port management script..."
     log_info "Parameters: port=$PORT protocol=$PROTOCOL family=$FAMILY table=$TABLE chain=$CHAIN action=$ACTION"
-    
+
     # Validate inputs
     validate_inputs
-    
+
     # Check prerequisites
     check_root
     check_nftables
-    
+
     # Ensure backup directory exists
     ensure_backup_dir
-    
+
     # Create backup
     create_backup
-    
+
     # If backup-only mode, exit here
     if [[ "$BACKUP_ONLY" == "true" ]]; then
         log_success "Backup-only mode completed"
         exit 0
     fi
-    
+
     # Perform the requested action
     if [[ "$ACTION" == "add" ]]; then
         add_rule "$PORT" "$PROTOCOL" "$CHAIN" "$TABLE" "$FAMILY"
     else
         remove_rule "$PORT" "$PROTOCOL" "$CHAIN" "$TABLE" "$FAMILY"
     fi
-    
+
     # Save ruleset if not in dry-run mode
     if [[ "$DRY_RUN" == "false" ]]; then
         save_ruleset
         enable_service
     fi
-    
+
     # Show current rules
     show_rules
-    
+
     # Success message
     echo
     echo "================================================================="

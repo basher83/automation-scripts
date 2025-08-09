@@ -2,7 +2,7 @@
 
 # Proxmox Backup Server Health Check Script
 # Checks if specified VMs have recent backups in PBS
-# 
+#
 # Usage:
 #   ./pbs-backup-health.sh
 #
@@ -51,17 +51,17 @@ log_error() {
 }
 
 # Check prerequisites
-if ! command -v curl &> /dev/null; then
+if ! command -v curl &>/dev/null; then
     log_error "curl is required but not installed"
     exit 1
 fi
 
-if ! command -v jq &> /dev/null; then
+if ! command -v jq &>/dev/null; then
     log_error "jq is required but not installed"
     exit 1
 fi
 
-if ! command -v infisical &> /dev/null; then
+if ! command -v infisical &>/dev/null; then
     log_error "infisical CLI is required but not installed"
     log_info "Install with: brew install infisical/get-cli/infisical"
     exit 1
@@ -85,14 +85,14 @@ backup_failures=0
 # Check each VM
 for vmid in "${VMID_LIST[@]}"; do
     log_info "Checking VM $vmid..."
-    
+
     # Make API request with proper error handling
     if response=$(curl -s --fail \
         --header "Authorization: PVEAPIToken=${PBS_TOKEN}" \
         "${PBS_HOST}/api2/json/datastore/${PBS_DATASTORE}/snapshots?type=vm&vmid=${vmid}" 2>/dev/null); then
-        
+
         # Check if backup exists
-        if echo "$response" | jq -e '.[0] | select(."backup-type" == "vm")' > /dev/null 2>&1; then
+        if echo "$response" | jq -e '.[0] | select(."backup-type" == "vm")' >/dev/null 2>&1; then
             backup_time=$(echo "$response" | jq -r '.[0]."backup-time" // empty' 2>/dev/null || echo "unknown")
             if [[ -n "$backup_time" ]] && [[ "$backup_time" != "unknown" ]]; then
                 # Convert epoch to human-readable date
