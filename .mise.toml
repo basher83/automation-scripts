@@ -8,7 +8,7 @@ AUTOMATION_SCRIPTS_DIR = "{{config_root}}"
 [tools]
 # Shell scripting and validation tools
 shellcheck = "0.11.0"        # Shell script static analysis
-shfmt = "3.10.0"             # Shell script formatter
+shfmt = "3.12.0"             # Shell script formatter
 
 # Development tools
 python = "3.12"              # For any Python-based utilities
