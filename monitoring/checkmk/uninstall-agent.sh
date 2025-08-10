@@ -3,7 +3,7 @@
 # Script Name: uninstall-agent.sh
 # Purpose: Removes the CheckMK monitoring agent from Debian/Ubuntu systems
 # Version: 1.0
-# 
+#
 # Usage:
 #   ./uninstall-agent.sh [OPTIONS]
 #
@@ -83,17 +83,17 @@ print_info() {
 # Logging functions
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >>"$LOG_FILE"
 }
 
 log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >>"$LOG_FILE"
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >>"$LOG_FILE"
 }
 
 # Show usage information
@@ -120,7 +120,7 @@ parse_args() {
                 INTERACTIVE=false
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -143,9 +143,9 @@ check_privileges() {
 # Check if agent is installed
 check_installation() {
     print_header "Checking CheckMK Agent Installation"
-    
+
     local found=0
-    
+
     # Check for various package names
     local package_patterns=("check-mk-agent" "checkmk-agent" "cmk-agent")
     for pattern in "${package_patterns[@]}"; do
@@ -154,50 +154,50 @@ check_installation() {
             local version_info=$(dpkg -l | grep "$pattern" | awk '{print $3}' || echo "unknown")
             print_info "Version: $version_info"
             log_info "Found package $pattern version $version_info"
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Package details: $(dpkg -l | grep "$pattern")" >> "$LOG_FILE"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Package details: $(dpkg -l | grep "$pattern")" >>"$LOG_FILE"
             found=1
         fi
     done
-    
+
     # Check for systemd services
     if systemctl list-units --all | grep -q "check-mk-agent"; then
         print_info "Found CheckMK systemd services"
         systemctl list-units --all | grep "check-mk-agent" | head -5
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Systemd services found:" >> "$LOG_FILE"
-        systemctl list-units --all | grep "check-mk-agent" >> "$LOG_FILE" 2>&1
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Systemd services found:" >>"$LOG_FILE"
+        systemctl list-units --all | grep "check-mk-agent" >>"$LOG_FILE" 2>&1
         found=1
     fi
-    
+
     # Check for socket files
     if systemctl list-unit-files | grep -q "check-mk-agent"; then
         print_info "Found CheckMK systemd unit files"
         systemctl list-unit-files | grep "check-mk-agent"
         found=1
     fi
-    
+
     # Check for running processes (exclude this uninstall script)
     local my_pid=$$
     local running_pids=$(pgrep -f "check.*mk" | grep -v "^${my_pid}$" || true)
-    
+
     if [[ -n "$running_pids" ]]; then
         print_info "Found CheckMK processes running"
         echo "$running_pids" | head -5
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running processes:" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running processes:" >>"$LOG_FILE"
         for pid in $running_pids; do
-            ps -p "$pid" -o pid,comm,args 2>/dev/null >> "$LOG_FILE" || true
+            ps -p "$pid" -o pid,comm,args 2>/dev/null >>"$LOG_FILE" || true
         done
         found=1
     fi
-    
+
     # Check for listening port
     if ss -tlnp | grep -q ":6556"; then
         print_info "Found service listening on CheckMK port 6556"
         ss -tlnp | grep ":6556"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Port 6556 listener:" >> "$LOG_FILE"
-        ss -tlnp | grep ":6556" >> "$LOG_FILE" 2>&1
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Port 6556 listener:" >>"$LOG_FILE"
+        ss -tlnp | grep ":6556" >>"$LOG_FILE" 2>&1
         found=1
     fi
-    
+
     # Check for binaries in specific locations only
     local binary_paths=(
         "/usr/bin/check_mk_agent"
@@ -206,20 +206,20 @@ check_installation() {
         "/usr/local/bin/check_mk_agent"
         "/usr/sbin/check_mk_agent"
     )
-    
+
     local found_binaries=""
     for binary in "${binary_paths[@]}"; do
         if [[ -f "$binary" ]]; then
             found_binaries="${found_binaries}${binary}\n"
         fi
     done
-    
+
     if [[ -n "$found_binaries" ]]; then
         print_info "Found CheckMK binaries:"
         echo -e "$found_binaries"
         found=1
     fi
-    
+
     if [[ $found -eq 1 ]]; then
         return 0
     else
@@ -231,7 +231,7 @@ check_installation() {
 # Stop agent services
 stop_services() {
     print_header "Stopping CheckMK Agent Services"
-    
+
     # List of CheckMK services to stop
     local checkmk_services=(
         "check-mk-agent-async.service"
@@ -239,7 +239,7 @@ stop_services() {
         "check-mk-agent.socket"
         "check-mk-agent@.service"
     )
-    
+
     # Stop specific CheckMK services
     for service in "${checkmk_services[@]}"; do
         if systemctl is-active --quiet "$service" 2>/dev/null; then
@@ -253,7 +253,7 @@ stop_services() {
             fi
         fi
     done
-    
+
     # Stop any running check-mk-agent@ instances
     local running_instances=$(systemctl list-units --all | grep "check-mk-agent@" | awk '{print $1}' | grep -v "check-mk-agent@.service" || true)
     if [[ -n "$running_instances" ]]; then
@@ -262,9 +262,9 @@ stop_services() {
                 print_info "Stopping instance: $instance"
                 systemctl stop "$instance" 2>/dev/null || true
             fi
-        done <<< "$running_instances"
+        done <<<"$running_instances"
     fi
-    
+
     # Disable services
     for service in "${checkmk_services[@]}"; do
         if systemctl list-unit-files | grep -q "^$service"; then
@@ -273,18 +273,18 @@ stop_services() {
             print_success "Disabled $service"
         fi
     done
-    
+
     # Kill any remaining CheckMK processes with timeout
     # Get our own PID to exclude from killing
     local my_pid=$$
-    
+
     # Find CheckMK processes (excluding this script)
     local checkmk_pids=$(pgrep -f "check.*mk" | grep -v "^${my_pid}$" || true)
-    local cmk_pids=$(pgrep -f "cmk-agent" || true)  # More specific pattern for cmk
-    
+    local cmk_pids=$(pgrep -f "cmk-agent" || true) # More specific pattern for cmk
+
     if [[ -n "$checkmk_pids" ]] || [[ -n "$cmk_pids" ]]; then
         print_info "Killing remaining CheckMK processes..."
-        
+
         # Kill specific PIDs (excluding our script)
         if [[ -n "$checkmk_pids" ]]; then
             echo "$checkmk_pids" | while read -r pid; do
@@ -296,7 +296,7 @@ stop_services() {
                 fi
             done
         fi
-        
+
         if [[ -n "$cmk_pids" ]]; then
             echo "$cmk_pids" | while read -r pid; do
                 if [[ -n "$pid" ]]; then
@@ -305,13 +305,13 @@ stop_services() {
                 fi
             done
         fi
-        
+
         sleep 1
-        
+
         # Check if any are still running and force kill if needed
         checkmk_pids=$(pgrep -f "check.*mk" | grep -v "^${my_pid}$" || true)
         cmk_pids=$(pgrep -f "cmk-agent" || true)
-        
+
         if [[ -n "$checkmk_pids" ]] || [[ -n "$cmk_pids" ]]; then
             if [[ -n "$checkmk_pids" ]]; then
                 echo "$checkmk_pids" | while read -r pid; do
@@ -322,7 +322,7 @@ stop_services() {
                     fi
                 done
             fi
-            
+
             if [[ -n "$cmk_pids" ]]; then
                 echo "$cmk_pids" | while read -r pid; do
                     if [[ -n "$pid" ]]; then
@@ -333,7 +333,7 @@ stop_services() {
             fi
             sleep 1
         fi
-        
+
         print_success "Processes terminated"
     fi
 }
@@ -341,11 +341,11 @@ stop_services() {
 # Remove the package
 remove_package() {
     print_header "Removing CheckMK Agent Package"
-    
+
     # Try different package names
     local package_patterns=("check-mk-agent" "checkmk-agent" "cmk-agent")
     local removed=0
-    
+
     for pattern in "${package_patterns[@]}"; do
         if dpkg -l | grep -q "$pattern"; then
             print_info "Removing package: $pattern"
@@ -368,7 +368,7 @@ remove_package() {
             fi
         fi
     done
-    
+
     if [[ $removed -eq 0 ]]; then
         print_warning "No CheckMK packages found to remove"
         print_info "The agent might be installed manually or via a different method"
@@ -378,7 +378,7 @@ remove_package() {
 # Clean up remaining files
 cleanup_files() {
     print_header "Cleaning Up Remaining Files"
-    
+
     local cleanup_dirs=(
         "/etc/check_mk"
         "/var/lib/check_mk_agent"
@@ -389,7 +389,7 @@ cleanup_files() {
         "/usr/bin/check_mk_agent"
         "/usr/bin/check_mk_caching_agent"
     )
-    
+
     for item in "${cleanup_dirs[@]}"; do
         if [[ -e "$item" ]]; then
             print_info "Removing: $item"
@@ -403,7 +403,7 @@ cleanup_files() {
             fi
         fi
     done
-    
+
     # Remove systemd unit files and symlinks
     local unit_files=(
         "/etc/systemd/system/check-mk-agent.socket"
@@ -419,7 +419,7 @@ cleanup_files() {
         "/usr/lib/systemd/system/check-mk-agent-async.service"
         "/usr/lib/systemd/system/cmk-agent-ctl-daemon.service"
     )
-    
+
     for unit_file in "${unit_files[@]}"; do
         if [[ -f "$unit_file" ]] || [[ -L "$unit_file" ]]; then
             print_info "Removing systemd unit: $unit_file"
@@ -427,7 +427,7 @@ cleanup_files() {
             print_success "Removed $unit_file"
         fi
     done
-    
+
     # Remove systemd symlinks from target directories
     local symlink_patterns=(
         "/etc/systemd/system/*.wants/check-mk*"
@@ -437,9 +437,9 @@ cleanup_files() {
         "/usr/lib/systemd/system/*.wants/check-mk*"
         "/usr/lib/systemd/system/*.wants/cmk*"
     )
-    
+
     for pattern in "${symlink_patterns[@]}"; do
-        shopt -s nullglob  # Make globs expand to nothing if no matches
+        shopt -s nullglob # Make globs expand to nothing if no matches
         for symlink in $pattern; do
             if [[ -L "$symlink" ]]; then
                 print_info "Removing systemd symlink: $symlink"
@@ -447,16 +447,16 @@ cleanup_files() {
                 print_success "Removed $symlink"
             fi
         done
-        shopt -u nullglob  # Reset to default behavior
+        shopt -u nullglob # Reset to default behavior
     done
-    
+
     # Reload systemd after removing unit files
     log_info "Reloading systemd daemon"
     systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"
-    
+
     # Check for any remaining check_mk files in specific directories
     print_info "Checking for any remaining CheckMK files..."
-    
+
     # Define specific paths to check (much faster than searching entire filesystem)
     local check_paths=(
         "/etc/check_mk"
@@ -472,12 +472,12 @@ cleanup_files() {
         "/opt/check_mk*"
         "/opt/cmk*"
     )
-    
+
     local remaining_files=""
     for path_pattern in "${check_paths[@]}"; do
         # Use shell globbing instead of find for speed
         # Note: We can't redirect glob expansion errors, so we check existence
-        shopt -s nullglob  # Make globs expand to nothing if no matches
+        shopt -s nullglob # Make globs expand to nothing if no matches
         for file in $path_pattern; do
             if [[ -e "$file" ]]; then
                 # Filter out false positives
@@ -486,9 +486,9 @@ cleanup_files() {
                 fi
             fi
         done
-        shopt -u nullglob  # Reset to default behavior
+        shopt -u nullglob # Reset to default behavior
     done
-    
+
     # Also check systemd locations
     for unit_dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
         if [[ -d "$unit_dir" ]]; then
@@ -501,13 +501,13 @@ cleanup_files() {
             shopt -u nullglob
         fi
     done
-    
+
     if [[ -n "$remaining_files" ]]; then
         print_warning "Found some remaining files:"
         echo -e "$remaining_files"
         print_info "You may want to review and remove these manually if needed"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Remaining files found:" >> "$LOG_FILE"
-        echo -e "$remaining_files" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Remaining files found:" >>"$LOG_FILE"
+        echo -e "$remaining_files" >>"$LOG_FILE"
     else
         print_success "No remaining CheckMK files found"
         log_info "No remaining CheckMK files found"
@@ -517,54 +517,54 @@ cleanup_files() {
 # Verify removal
 verify_removal() {
     print_header "Verifying Removal"
-    
+
     local issues=0
-    
+
     # Check packages
     log_info "Starting verification of removal"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining packages" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining packages" >>"$LOG_FILE"
     if dpkg -l | grep -q "check-mk-agent"; then
         print_error "CheckMK package still appears to be installed"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Package still installed:" >> "$LOG_FILE"
-        dpkg -l | grep "check-mk-agent" >> "$LOG_FILE" 2>&1
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Package still installed:" >>"$LOG_FILE"
+        dpkg -l | grep "check-mk-agent" >>"$LOG_FILE" 2>&1
         issues=1
     else
         print_success "CheckMK package successfully removed"
         log_info "Package removal verified"
     fi
-    
+
     # Check for specific services
     local checkmk_services=(
         "check-mk-agent-async.service"
         "cmk-agent-ctl-daemon.service"
         "check-mk-agent.socket"
     )
-    
+
     for service in "${checkmk_services[@]}"; do
         if systemctl is-active --quiet "$service" 2>/dev/null; then
             print_warning "Service $service is still running"
             issues=1
         fi
     done
-    
+
     if [[ $issues -eq 0 ]]; then
         print_success "No CheckMK services are running"
     fi
-    
+
     # Check for any remaining CheckMK units (not-found units are expected after uninstall)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining systemd units" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining systemd units" >>"$LOG_FILE"
     local remaining_units=$(systemctl list-units --all | grep -i "check-mk\|cmk" | grep -v "slice" | grep -v "not-found" || true)
     if [[ -n "$remaining_units" ]]; then
         print_warning "Found remaining CheckMK systemd units:"
         echo "$remaining_units"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] Remaining systemd units:" >> "$LOG_FILE"
-        echo "$remaining_units" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] Remaining systemd units:" >>"$LOG_FILE"
+        echo "$remaining_units" >>"$LOG_FILE"
         issues=1
     else
         print_success "No active CheckMK systemd units remaining"
         log_info "No active systemd units found"
     fi
-    
+
     # Check listening ports
     if ss -tlnp | grep -q ":6556"; then
         print_warning "Port 6556 is still in use"
@@ -573,12 +573,12 @@ verify_removal() {
     else
         print_success "CheckMK agent port (6556) is not in use"
     fi
-    
+
     # Check for running processes (excluding this script)
     local my_pid=$$
     local remaining_pids=$(pgrep -f "check.*mk" | grep -v "^${my_pid}$" || true)
     local cmk_pids=$(pgrep -f "cmk-agent" || true)
-    
+
     # Filter out any invalid PIDs
     local valid_pids=""
     for pid in $remaining_pids $cmk_pids; do
@@ -586,7 +586,7 @@ verify_removal() {
             valid_pids="$valid_pids $pid"
         fi
     done
-    
+
     if [[ -n "$valid_pids" ]]; then
         print_warning "CheckMK processes are still running:"
         for pid in $valid_pids; do
@@ -599,7 +599,7 @@ verify_removal() {
     else
         print_success "No CheckMK processes running"
     fi
-    
+
     if [[ $issues -eq 0 ]]; then
         print_success "Complete removal verified!"
         log_info "Verification completed successfully - no issues found"
@@ -608,7 +608,7 @@ verify_removal() {
         print_warning "Some minor issues found during verification - this is normal"
         print_info "The agent has been uninstalled, but some cleanup may be needed"
         log_warn "Verification completed with minor issues (issues=$issues)"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Total verification issues: $issues" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Total verification issues: $issues" >>"$LOG_FILE"
         # Don't fail the script for minor verification issues
         return 0
     fi
@@ -640,52 +640,52 @@ confirm_action() {
 main() {
     # Parse command line arguments
     parse_args "$@"
-    
+
     # Set up logging
-    echo "Uninstallation started at $(date)" > "$LOG_FILE"
+    echo "Uninstallation started at $(date)" >"$LOG_FILE"
     chmod 640 "$LOG_FILE"
-    
+
     echo -e "${BOLD}${CYAN}CheckMK Agent Uninstallation Script${NC}"
     echo -e "${CYAN}===================================${NC}"
     print_info "Log file: $LOG_FILE"
     echo ""
-    
+
     log_info "Starting CheckMK agent uninstallation"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.0" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >> "$LOG_FILE"
-    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.0" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >>"$LOG_FILE"
+
     check_privileges
-    
+
     if ! check_installation; then
         log_info "CheckMK agent not found. Nothing to uninstall."
         print_info "Nothing to uninstall. Exiting."
         exit 0
     fi
-    
+
     # Ask for confirmation in interactive mode
     if ! confirm_action "Are you sure you want to uninstall the CheckMK agent?"; then
         log_info "Uninstallation cancelled by user"
         print_info "Uninstallation cancelled."
         exit 0
     fi
-    
+
     log_info "User confirmed uninstallation"
-    
+
     stop_services
     remove_package
     cleanup_files
     verify_removal
-    
+
     print_header "Uninstallation Complete"
     print_success "CheckMK agent has been successfully removed!"
     print_info "Your system is no longer being monitored by CheckMK"
-    
+
     # Save completion to log
-    echo "Uninstallation completed at $(date)" >> "$LOG_FILE"
+    echo "Uninstallation completed at $(date)" >>"$LOG_FILE"
     log_info "CheckMK agent uninstallation completed successfully"
-    
+
     echo ""
     echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}✓ Uninstallation log saved to: ${BOLD}$LOG_FILE${NC}"

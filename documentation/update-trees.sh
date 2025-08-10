@@ -2,7 +2,7 @@
 
 # Documentation Tree Update Script
 # Updates tree structures in documentation files between marker comments
-# 
+#
 # Usage:
 #   ./update-trees.sh
 #
@@ -43,7 +43,7 @@ log_error() {
 log_info "🌳 Updating documentation trees..."
 
 # Check if tree command is available
-if ! command -v tree &> /dev/null; then
+if ! command -v tree &>/dev/null; then
     log_error "'tree' command not found. Please install it:"
     log_info "  Ubuntu/Debian: sudo apt-get install tree"
     log_info "  MacOS: brew install tree"
@@ -55,49 +55,49 @@ update_tree_in_file() {
     local file=$1
     local directory=$2
     local tree_flags="${3:--a -I '.git|node_modules|.DS_Store' --charset ascii}"
-    
+
     if [[ ! -f "$file" ]]; then
         log_warn "File $file not found, skipping..."
         return
     fi
-    
+
     # Check if file has tree markers
     if ! grep -q "<!-- TREE-START -->" "$file" || ! grep -q "<!-- TREE-END -->" "$file"; then
         log_warn "Tree markers not found in $file, skipping..."
         return
     fi
-    
+
     log_info "📄 Updating tree in: $file"
-    
+
     # Generate tree
     local tree_output=$(tree $directory $tree_flags)
-    
+
     # Create a temporary file
     local temp_file=$(mktemp)
-    
+
     # Process file line by line
     local in_tree_section=false
     local tree_written=false
-    
+
     while IFS= read -r line; do
         if [[ "$line" == *"<!-- TREE-START -->"* ]]; then
-            echo "$line" >> "$temp_file"
-            echo '```plaintext' >> "$temp_file"
-            echo "$tree_output" >> "$temp_file"
-            echo '```' >> "$temp_file"
+            echo "$line" >>"$temp_file"
+            echo '```plaintext' >>"$temp_file"
+            echo "$tree_output" >>"$temp_file"
+            echo '```' >>"$temp_file"
             in_tree_section=true
             tree_written=true
         elif [[ "$line" == *"<!-- TREE-END -->"* ]]; then
-            echo "$line" >> "$temp_file"
+            echo "$line" >>"$temp_file"
             in_tree_section=false
         elif [[ "$in_tree_section" == false ]]; then
-            echo "$line" >> "$temp_file"
+            echo "$line" >>"$temp_file"
         fi
-    done < "$file"
-    
+    done <"$file"
+
     # Replace original file
     mv "$temp_file" "$file"
-    
+
     log_info "✓ Updated tree in $file"
 }
 
@@ -114,15 +114,15 @@ update_tree_in_file "mission-control/core-github-repos.md" "." "-L 2 -d -I '.git
 if grep -q "<!-- DOCS-TREE-START -->" "mission-control/core-github-repos.md"; then
     # Create a temporary file with modified markers
     sed 's/<!-- DOCS-TREE-START -->/<!-- TREE-START -->/g; s/<!-- DOCS-TREE-END -->/<!-- TREE-END -->/g' \
-        "mission-control/core-github-repos.md" > "/tmp/temp-core-github-repos.md"
-    
+        "mission-control/core-github-repos.md" >"/tmp/temp-core-github-repos.md"
+
     # Update the docs tree
     update_tree_in_file "/tmp/temp-core-github-repos.md" "." "-I '.git|node_modules|.DS_Store|.github|.cursor' --charset ascii"
-    
+
     # Change markers back
     sed 's/<!-- TREE-START -->/<!-- DOCS-TREE-START -->/g; s/<!-- TREE-END -->/<!-- DOCS-TREE-END -->/g' \
-        "/tmp/temp-core-github-repos.md" > "mission-control/core-github-repos.md"
-    
+        "/tmp/temp-core-github-repos.md" >"mission-control/core-github-repos.md"
+
     rm "/tmp/temp-core-github-repos.md"
 fi
 

@@ -3,7 +3,7 @@
 # Script Name: check-netdata-status.sh
 # Purpose: Check the status of Netdata streaming and replication
 # Version: 1.0
-# 
+#
 # Usage:
 #   ./check-netdata-status.sh [OPTIONS]
 #
@@ -71,7 +71,7 @@ print_info() {
 
 # Show usage
 usage() {
-    cat << EOF
+    cat <<EOF
 Usage: $0 [OPTIONS]
 
 Check the status of Netdata streaming and replication
@@ -104,7 +104,7 @@ parse_args() {
                 VERBOSE=true
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -119,10 +119,10 @@ parse_args() {
 # Check if Netdata is running
 check_netdata_service() {
     print_header "Netdata Service Status"
-    
+
     if systemctl is-active --quiet netdata 2>/dev/null; then
         print_success "Netdata service is running"
-        
+
         if [[ "$VERBOSE" == "true" ]]; then
             systemctl status netdata --no-pager | head -10
         fi
@@ -137,31 +137,31 @@ auto_detect_node_type() {
     if [[ -n "$NODE_TYPE" ]]; then
         return 0
     fi
-    
+
     print_info "Auto-detecting node type..."
-    
+
     # Check if streaming is enabled
     if grep -q "^\s*enabled\s*=\s*yes" "$STREAM_CONF" 2>/dev/null; then
         NODE_TYPE="child"
     else
         NODE_TYPE="parent"
     fi
-    
+
     # Double-check by looking for API key sections
     if grep -qE "^\[[a-f0-9-]+\]" "$STREAM_CONF" 2>/dev/null; then
         NODE_TYPE="parent"
     fi
-    
+
     print_info "Detected node type: $NODE_TYPE"
 }
 
 # Check API connectivity
 check_api_connectivity() {
     print_header "API Connectivity"
-    
+
     if curl -s -f "${NETDATA_API}/info" >/dev/null 2>&1; then
         print_success "Netdata API is accessible"
-        
+
         if [[ "$VERBOSE" == "true" ]]; then
             local version=$(curl -s "${NETDATA_API}/info" | jq -r '.version' 2>/dev/null || echo "unknown")
             print_info "Netdata version: $version"
@@ -174,27 +174,27 @@ check_api_connectivity() {
 # Check parent node status
 check_parent_status() {
     print_header "Parent Node Status"
-    
+
     # Check for API key sections
     local api_keys=$(grep -E "^\[[a-f0-9-]+\]" "$STREAM_CONF" 2>/dev/null | wc -l)
     if [[ $api_keys -gt 0 ]]; then
         print_success "Found $api_keys API key configuration(s)"
-        
+
         if [[ "$VERBOSE" == "true" ]]; then
             grep -E "^\[[a-f0-9-]+\]" "$STREAM_CONF"
         fi
     else
         print_warning "No API key configurations found"
     fi
-    
+
     # Check for connected children
     print_header "Connected Children"
-    
+
     if [[ -f "$ERROR_LOG" ]]; then
         local recent_connections=$(grep "new client" "$ERROR_LOG" 2>/dev/null | tail -10)
         if [[ -n "$recent_connections" ]]; then
             print_success "Recent child connections detected"
-            
+
             if [[ "$VERBOSE" == "true" ]]; then
                 echo "$recent_connections"
             fi
@@ -202,12 +202,12 @@ check_parent_status() {
             print_warning "No recent child connections found in logs"
         fi
     fi
-    
+
     # Check streaming metrics via API
     local stream_info=$(curl -s "${NETDATA_API}/info" | jq '.stream' 2>/dev/null)
     if [[ -n "$stream_info" ]] && [[ "$stream_info" != "null" ]]; then
         print_info "Streaming information available via API"
-        
+
         if [[ "$VERBOSE" == "true" ]]; then
             echo "$stream_info" | jq .
         fi
@@ -217,7 +217,7 @@ check_parent_status() {
 # Check child node status
 check_child_status() {
     print_header "Child Node Status"
-    
+
     # Check streaming configuration
     local streaming_enabled=$(grep -E "^\s*enabled\s*=\s*yes" "$STREAM_CONF" 2>/dev/null | head -1)
     if [[ -n "$streaming_enabled" ]]; then
@@ -226,7 +226,7 @@ check_child_status() {
         print_error "Streaming is not enabled"
         return 1
     fi
-    
+
     # Get destination parents
     local destinations=$(grep -E "^\s*destination\s*=" "$STREAM_CONF" 2>/dev/null | sed 's/.*destination\s*=\s*//')
     if [[ -n "$destinations" ]]; then
@@ -234,22 +234,22 @@ check_child_status() {
     else
         print_error "No parent destinations configured"
     fi
-    
+
     # Check for streaming connections
     print_header "Streaming Connection Status"
-    
+
     if [[ -f "$ERROR_LOG" ]]; then
         local established=$(grep "established communication" "$ERROR_LOG" 2>/dev/null | tail -5)
         if [[ -n "$established" ]]; then
             print_success "Streaming connections established"
-            
+
             if [[ "$VERBOSE" == "true" ]]; then
                 echo "$established"
             fi
         else
             print_warning "No established connections found in logs"
         fi
-        
+
         # Check for recent errors
         local stream_errors=$(grep -i "stream.*error\|failed to connect" "$ERROR_LOG" 2>/dev/null | tail -5)
         if [[ -n "$stream_errors" ]]; then
@@ -264,14 +264,14 @@ check_replication_status() {
     if [[ "$NODE_TYPE" != "parent" ]]; then
         return 0
     fi
-    
+
     print_header "Replication Status"
-    
+
     # Check if streaming to other parents is enabled
     local replication_enabled=$(grep -A5 "^\[stream\]" "$STREAM_CONF" 2>/dev/null | grep "enabled\s*=\s*yes")
     if [[ -n "$replication_enabled" ]]; then
         print_success "Parent-to-parent replication is enabled"
-        
+
         local peer_destinations=$(grep -A5 "^\[stream\]" "$STREAM_CONF" 2>/dev/null | grep "destination" | sed 's/.*destination\s*=\s*//')
         if [[ -n "$peer_destinations" ]]; then
             print_info "Replicating to: $peer_destinations"
@@ -279,7 +279,7 @@ check_replication_status() {
     else
         print_info "Parent-to-parent replication is not enabled"
     fi
-    
+
     # Check for replication connections
     if [[ -f "$ERROR_LOG" ]]; then
         local replication_logs=$(grep "replication\|parent.*parent" "$ERROR_LOG" 2>/dev/null | tail -5)
@@ -293,21 +293,21 @@ check_replication_status() {
 # Check system resources
 check_resources() {
     print_header "Resource Usage"
-    
+
     # Get Netdata process info
     local netdata_pid=$(pidof netdata 2>/dev/null || true)
     if [[ -n "$netdata_pid" ]]; then
         local mem_usage=$(ps -p "$netdata_pid" -o %mem= 2>/dev/null | xargs)
         local cpu_usage=$(ps -p "$netdata_pid" -o %cpu= 2>/dev/null | xargs)
-        
+
         print_info "Memory usage: ${mem_usage}%"
         print_info "CPU usage: ${cpu_usage}%"
-        
+
         if [[ "$VERBOSE" == "true" ]]; then
             # Get more detailed info
             local virt_mem=$(ps -p "$netdata_pid" -o vsz= 2>/dev/null | xargs)
             local res_mem=$(ps -p "$netdata_pid" -o rss= 2>/dev/null | xargs)
-            
+
             print_info "Virtual memory: $((virt_mem / 1024)) MB"
             print_info "Resident memory: $((res_mem / 1024)) MB"
         fi
@@ -317,19 +317,19 @@ check_resources() {
 # Show summary
 show_summary() {
     print_header "Summary"
-    
+
     echo -e "${BOLD}Node Type:${NC} $NODE_TYPE"
-    
+
     if [[ "$NODE_TYPE" == "parent" ]]; then
         echo -e "${BOLD}Role:${NC} Parent node accepting child streams"
-        
+
         # Count connected children if possible
         local child_count=$(grep -c "new client" "$ERROR_LOG" 2>/dev/null || echo "0")
         echo -e "${BOLD}Recent connections:${NC} $child_count"
     else
         echo -e "${BOLD}Role:${NC} Child node streaming to parents"
     fi
-    
+
     echo ""
     echo -e "${CYAN}Configuration files:${NC}"
     echo "  - Stream config: $STREAM_CONF"
@@ -340,21 +340,21 @@ show_summary() {
 # Main execution
 main() {
     parse_args "$@"
-    
+
     echo -e "${BOLD}${CYAN}Netdata Status Check${NC}"
     echo -e "${CYAN}===================${NC}"
-    
+
     check_netdata_service
     auto_detect_node_type
     check_api_connectivity
-    
+
     if [[ "$NODE_TYPE" == "parent" ]]; then
         check_parent_status
         check_replication_status
     else
         check_child_status
     fi
-    
+
     check_resources
     show_summary
 }

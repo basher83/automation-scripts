@@ -2,7 +2,7 @@
 
 # Prometheus PVE Exporter Uninstall Script
 # Safely removes prometheus-pve-exporter and related components
-# 
+#
 # Usage:
 #   ./uninstall-pve-exporter.sh [OPTIONS]
 #
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
             BACKUP_CONFIG=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
@@ -97,7 +97,7 @@ user_exists() {
 
 # Function to check if PVE user exists
 pve_user_exists() {
-    command -v pveum &> /dev/null && pveum user list | grep -q "$1"
+    command -v pveum &>/dev/null && pveum user list | grep -q "$1"
 }
 
 # Confirmation prompt
@@ -105,31 +105,31 @@ if [[ "$FORCE_MODE" != "true" ]] && [[ -t 0 ]]; then
     echo -e "${YELLOW}Warning: This will remove prometheus-pve-exporter and all related data${NC}"
     echo
     echo "Components to be removed:"
-    
+
     if service_exists "$SERVICE_NAME"; then
         echo "  ✓ Systemd service: $SERVICE_NAME"
     fi
-    
+
     if [[ -d "$INSTALL_DIR" ]]; then
         echo "  ✓ Installation directory: $INSTALL_DIR"
     fi
-    
+
     if [[ -d "$CONFIG_DIR" ]]; then
         echo "  ✓ Configuration directory: $CONFIG_DIR"
     fi
-    
+
     if user_exists "$USER"; then
         echo "  ✓ System user: $USER"
     fi
-    
+
     if [[ -d "$USER_HOME" ]]; then
         echo "  ✓ User home directory: $USER_HOME"
     fi
-    
+
     if pve_user_exists "$PVE_USERNAME"; then
         echo "  ✓ Proxmox VE user: $PVE_USERNAME"
     fi
-    
+
     echo
     read -p "Are you sure you want to continue? [y/N] " -n 1 -r
     echo
@@ -150,21 +150,21 @@ fi
 # Stop and disable service
 if service_exists "$SERVICE_NAME"; then
     log_info "Stopping and disabling service..."
-    
+
     # Stop service if running
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         systemctl stop "$SERVICE_NAME" || log_warn "Failed to stop service"
     else
         log_info "Service is not running"
     fi
-    
+
     # Disable service if enabled
     if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
         systemctl disable "$SERVICE_NAME" || log_warn "Failed to disable service"
     else
         log_info "Service is not enabled"
     fi
-    
+
     # Remove service file
     if [[ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
         rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
@@ -187,12 +187,12 @@ fi
 # Remove Proxmox VE user and associated tokens/ACLs
 if pve_user_exists "$PVE_USERNAME"; then
     log_info "Removing Proxmox VE user and permissions..."
-    
+
     # First remove any ACL entries for this user
     log_info "Cleaning up ACL entries..."
     pveum acl delete / --users "$PVE_USERNAME" 2>/dev/null || true
     pveum acl delete / --tokens "${PVE_USERNAME}!monitoring" 2>/dev/null || true
-    
+
     # Then remove the user (this also removes associated tokens)
     pveum user delete "$PVE_USERNAME" || log_warn "Failed to remove PVE user"
     log_info "Proxmox VE user and permissions removed"
@@ -203,16 +203,16 @@ fi
 # Remove system user (after removing files owned by the user)
 if user_exists "$USER"; then
     log_info "Removing system user..."
-    
+
     # Kill any processes owned by the user gracefully
-    if pgrep -u "$USER" > /dev/null 2>&1; then
+    if pgrep -u "$USER" >/dev/null 2>&1; then
         log_info "Stopping processes owned by $USER..."
         pkill -TERM -u "$USER" 2>/dev/null || true
         sleep 2
         # Force kill if still running
         pkill -KILL -u "$USER" 2>/dev/null || true
     fi
-    
+
     # Remove user
     userdel "$USER" || log_warn "Failed to remove user"
     log_info "System user removed"
@@ -240,20 +240,20 @@ fi
 # Remove PVE exporter configuration (be careful not to remove other Prometheus configs)
 if [[ -d "$CONFIG_DIR" ]]; then
     log_info "Removing PVE exporter configuration..."
-    
+
     # Remove only PVE-specific files
-    local pve_files=(
+    pve_files=(
         "$CONFIG_DIR/pve.yml"
         "$CONFIG_DIR/pve.yml.backup"*
     )
-    
+
     for file in "${pve_files[@]}"; do
         if [[ -e "$file" ]]; then
             rm -f "$file"
             log_info "Removed: $(basename "$file")"
         fi
     done
-    
+
     # Remove directory only if empty
     if [[ -z "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
         rmdir "$CONFIG_DIR"
@@ -283,7 +283,7 @@ chmod 640 "$LOG_FILE"
     echo "  - System user: $USER"
     echo "  - PVE user: $PVE_USERNAME"
     echo "  - ACL permissions for $PVE_USERNAME"
-} >> "$LOG_FILE"
+} >>"$LOG_FILE"
 
 log_info "✅ Prometheus PVE Exporter has been successfully removed"
 log_info "Uninstall log saved to: $LOG_FILE"
