@@ -3,7 +3,7 @@
 # Script Name: configure-parent-replication.sh
 # Purpose: Configure mutual replication between Netdata parent nodes
 # Version: 1.0
-# 
+#
 # Usage:
 #   ./configure-parent-replication.sh [OPTIONS]
 #
@@ -60,17 +60,17 @@ fi
 # Logging functions
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >>"$LOG_FILE"
 }
 
 log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >>"$LOG_FILE"
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >>"$LOG_FILE"
 }
 
 print_header() {
@@ -79,7 +79,7 @@ print_header() {
 
 # Show usage
 usage() {
-    cat << EOF
+    cat <<EOF
 Usage: $0 [OPTIONS]
 
 Configure mutual replication between Netdata parent nodes
@@ -132,7 +132,7 @@ parse_args() {
                 DRY_RUN=true
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -142,18 +142,18 @@ parse_args() {
                 ;;
         esac
     done
-    
+
     # Validate required parameters
     if [[ -z "$NODE_IP" ]]; then
         log_error "Node IP is required (--node-ip)"
         usage
     fi
-    
+
     if [[ -z "$PEER_IPS" ]]; then
         log_error "Peer IPs are required (--peer-ips)"
         usage
     fi
-    
+
     if [[ -z "$REPLICATION_KEY" ]]; then
         log_error "Replication key is required (--replication-key)"
         usage
@@ -163,32 +163,32 @@ parse_args() {
 # Check prerequisites
 check_prerequisites() {
     print_header "Checking Prerequisites"
-    
+
     # Check if running as root
     if [[ $EUID -ne 0 ]]; then
         log_error "This script must be run as root (use sudo)"
         exit 1
     fi
-    
+
     # Check if Netdata is installed
     if ! systemctl is-active --quiet netdata 2>/dev/null; then
         log_error "Netdata is not running. Please install Netdata first."
         exit 1
     fi
-    
+
     # Check if stream.conf exists
     if [[ ! -f "$STREAM_CONF" ]]; then
         log_error "stream.conf not found at $STREAM_CONF"
         exit 1
     fi
-    
+
     log_info "Prerequisites check passed"
 }
 
 # Backup configuration
 backup_config() {
     local backup_file="${STREAM_CONF}.backup.$(date +%Y%m%d_%H%M%S)"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would backup $STREAM_CONF to $backup_file"
     else
@@ -200,7 +200,7 @@ backup_config() {
 # Update stream.conf for replication
 update_stream_config() {
     print_header "Updating Stream Configuration"
-    
+
     # Convert comma-separated IPs to space-separated with ports
     local destinations=""
     local peer_array=(${PEER_IPS//,/ })
@@ -208,56 +208,56 @@ update_stream_config() {
         destinations="${destinations}${peer}:19999 "
     done
     destinations="${destinations% }" # Remove trailing space
-    
+
     # Create temporary config file
     local temp_conf="/tmp/stream.conf.tmp"
-    
+
     # Read existing config and update
     local in_stream_section=false
     local stream_section_updated=false
     local replication_section_exists=false
-    
+
     while IFS= read -r line; do
         if [[ "$line" =~ ^\[stream\] ]]; then
             in_stream_section=true
-            echo "$line" >> "$temp_conf"
-            
+            echo "$line" >>"$temp_conf"
+
             if [[ "$ENABLE_STREAMING" == "yes" ]]; then
-                echo "    enabled = yes" >> "$temp_conf"
-                echo "    destination = $destinations" >> "$temp_conf"
-                echo "    api key = $REPLICATION_KEY" >> "$temp_conf"
+                echo "    enabled = yes" >>"$temp_conf"
+                echo "    destination = $destinations" >>"$temp_conf"
+                echo "    api key = $REPLICATION_KEY" >>"$temp_conf"
                 stream_section_updated=true
             else
-                echo "    enabled = no" >> "$temp_conf"
+                echo "    enabled = no" >>"$temp_conf"
             fi
-            
+
         elif [[ "$line" =~ ^\[.*\] ]] && [[ "$in_stream_section" == "true" ]]; then
             in_stream_section=false
-            echo "$line" >> "$temp_conf"
-            
+            echo "$line" >>"$temp_conf"
+
         elif [[ "$line" =~ ^\[$REPLICATION_KEY\] ]]; then
             replication_section_exists=true
-            echo "$line" >> "$temp_conf"
-            
+            echo "$line" >>"$temp_conf"
+
         elif [[ "$in_stream_section" == "true" ]] && [[ "$stream_section_updated" == "false" ]]; then
             # Skip existing stream settings, we're replacing them
             continue
-            
+
         else
-            echo "$line" >> "$temp_conf"
+            echo "$line" >>"$temp_conf"
         fi
-    done < "$STREAM_CONF"
-    
+    done <"$STREAM_CONF"
+
     # Add replication key section if it doesn't exist
     if [[ "$replication_section_exists" == "false" ]]; then
-        echo "" >> "$temp_conf"
-        echo "# Parent replication configuration" >> "$temp_conf"
-        echo "[$REPLICATION_KEY]" >> "$temp_conf"
-        echo "    enabled = yes" >> "$temp_conf"
-        echo "    allow from = ${PEER_IPS//,/ } $NODE_IP" >> "$temp_conf"
-        echo "    db = dbengine" >> "$temp_conf"
+        echo "" >>"$temp_conf"
+        echo "# Parent replication configuration" >>"$temp_conf"
+        echo "[$REPLICATION_KEY]" >>"$temp_conf"
+        echo "    enabled = yes" >>"$temp_conf"
+        echo "    allow from = ${PEER_IPS//,/ } $NODE_IP" >>"$temp_conf"
+        echo "    db = dbengine" >>"$temp_conf"
     fi
-    
+
     # Show diff or apply changes
     if [[ "$DRY_RUN" == "true" ]]; then
         print_header "Configuration Changes (DRY RUN)"
@@ -283,7 +283,7 @@ restart_netdata() {
         print_header "Restarting Netdata"
         systemctl restart netdata
         sleep 5
-        
+
         if systemctl is-active --quiet netdata; then
             log_info "Netdata service restarted successfully"
         else
@@ -298,12 +298,12 @@ verify_replication() {
     if [[ "$DRY_RUN" == "true" ]]; then
         return 0
     fi
-    
+
     print_header "Verifying Replication"
-    
+
     log_info "Waiting for replication connections..."
     sleep 10
-    
+
     # Check for replication connections in logs
     if grep -q "new client.*$REPLICATION_KEY" /var/log/netdata/error.log 2>/dev/null; then
         log_info "Replication connections detected"
@@ -317,13 +317,13 @@ verify_replication() {
 # Display summary
 display_summary() {
     print_header "Configuration Summary"
-    
+
     echo -e "${GREEN}Parent Replication Configuration:${NC}"
     echo -e "  This Node IP: ${BOLD}$NODE_IP${NC}"
     echo -e "  Peer Parent IPs: ${BOLD}$PEER_IPS${NC}"
     echo -e "  Replication Key: ${BOLD}$REPLICATION_KEY${NC}"
     echo -e "  Streaming Enabled: ${BOLD}$ENABLE_STREAMING${NC}"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         echo ""
         echo -e "${YELLOW}This was a DRY RUN. No changes were applied.${NC}"
@@ -336,29 +336,29 @@ display_summary() {
         echo "   - grep 'replication' /var/log/netdata/error.log"
         echo "3. Check parent dashboards for replicated data"
     fi
-    
+
     log_info "Configuration completed"
 }
 
 # Main execution
 main() {
     # Set up logging
-    echo "Configuration started at $(date)" > "$LOG_FILE"
+    echo "Configuration started at $(date)" >"$LOG_FILE"
     chmod 640 "$LOG_FILE"
-    
+
     parse_args "$@"
-    
+
     echo -e "${BOLD}${CYAN}Netdata Parent Replication Configuration${NC}"
     echo -e "${CYAN}=======================================${NC}"
-    
+
     check_prerequisites
     backup_config
     update_stream_config
     restart_netdata
     verify_replication
     display_summary
-    
-    echo "Configuration completed at $(date)" >> "$LOG_FILE"
+
+    echo "Configuration completed at $(date)" >>"$LOG_FILE"
 }
 
 # Run main function

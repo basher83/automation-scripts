@@ -27,7 +27,7 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 
 # Check if shellcheck is installed
-if ! command -v shellcheck &> /dev/null; then
+if ! command -v shellcheck &>/dev/null; then
     echo -e "${RED}Error: shellcheck is not installed${NC}"
     echo "Install it with: sudo apt-get install shellcheck"
     echo "Or run: ./bootstrap/bootstrap.sh"
@@ -51,16 +51,16 @@ failed_scripts=""
 # Run shellcheck on each script
 for script in $scripts; do
     echo -n "Checking $script... "
-    
+
     # Run shellcheck with error severity (matching CI)
-    if shellcheck -S error "$script" > /dev/null 2>&1; then
+    if shellcheck -S error "$script" >/dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
         ((passed_count++))
     else
         echo -e "${RED}✗${NC}"
         ((failed_count++))
         failed_scripts="$failed_scripts$script\n"
-        
+
         # Show the errors
         echo -e "${YELLOW}  Issues found:${NC}"
         shellcheck -S error "$script" 2>&1 | sed 's/^/    /'
