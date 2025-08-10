@@ -3,7 +3,7 @@
 # Script Name: uninstall-agent.sh
 # Purpose: Removes the Zabbix monitoring agent from Debian/Ubuntu systems
 # Version: 1.0
-# 
+#
 # Usage:
 #   ./uninstall-agent.sh [OPTIONS]
 #
@@ -83,17 +83,17 @@ print_info() {
 # Logging functions
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >>"$LOG_FILE"
 }
 
 log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >>"$LOG_FILE"
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >>"$LOG_FILE"
 }
 
 # Show usage information
@@ -120,7 +120,7 @@ parse_args() {
                 INTERACTIVE=false
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -143,9 +143,9 @@ check_privileges() {
 # Check if agent is installed
 check_installation() {
     print_header "Checking Zabbix Agent Installation"
-    
+
     local found=0
-    
+
     # Check for various package names - use exact match to avoid duplicates
     local package_patterns=("zabbix-agent" "zabbix-agent2")
     for pattern in "${package_patterns[@]}"; do
@@ -154,11 +154,11 @@ check_installation() {
             print_info "Found package: $pattern"
             print_info "Version: $version_info"
             log_info "Found package $pattern version $version_info"
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Package details: $(dpkg -l | grep "^ii  ${pattern} ")" >> "$LOG_FILE"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Package details: $(dpkg -l | grep "^ii  ${pattern} ")" >>"$LOG_FILE"
             found=1
         fi
     done
-    
+
     # Also check for Zabbix agent2 plugins
     local plugin_packages=$(dpkg -l | grep "^ii  zabbix-agent2-plugin" | awk '{print $2}' || true)
     if [[ -n "$plugin_packages" ]]; then
@@ -169,49 +169,49 @@ check_installation() {
             fi
         done
         log_info "Found Zabbix agent2 plugins: $(echo $plugin_packages | tr '\n' ' ')"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Plugin packages: $plugin_packages" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Plugin packages: $plugin_packages" >>"$LOG_FILE"
         found=1
     fi
-    
+
     # Check for systemd services
     if systemctl list-units --all | grep -q "zabbix-agent"; then
         print_info "Found Zabbix systemd services"
         systemctl list-units --all | grep "zabbix-agent" | head -5
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Systemd services found:" >> "$LOG_FILE"
-        systemctl list-units --all | grep "zabbix-agent" >> "$LOG_FILE" 2>&1
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Systemd services found:" >>"$LOG_FILE"
+        systemctl list-units --all | grep "zabbix-agent" >>"$LOG_FILE" 2>&1
         found=1
     fi
-    
+
     # Check for socket files
     if systemctl list-unit-files | grep -q "zabbix-agent"; then
         print_info "Found Zabbix systemd unit files"
         systemctl list-unit-files | grep "zabbix-agent"
         found=1
     fi
-    
+
     # Check for running processes (exclude this uninstall script)
     local my_pid=$$
     local running_pids=$(pgrep -f "zabbix_agent" | grep -v "^${my_pid}$" || true)
-    
+
     if [[ -n "$running_pids" ]]; then
         print_info "Found Zabbix processes running"
         echo "$running_pids" | head -5
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running processes:" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running processes:" >>"$LOG_FILE"
         for pid in $running_pids; do
-            ps -p "$pid" -o pid,comm,args 2>/dev/null >> "$LOG_FILE" || true
+            ps -p "$pid" -o pid,comm,args 2>/dev/null >>"$LOG_FILE" || true
         done
         found=1
     fi
-    
+
     # Check for listening ports (Zabbix agent ports: 10050 and 10051)
     if ss -tlnp | grep -E ":(10050|10051)"; then
         print_info "Found service listening on Zabbix agent ports (10050/10051)"
         ss -tlnp | grep -E ":(10050|10051)"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Port listeners:" >> "$LOG_FILE"
-        ss -tlnp | grep -E ":(10050|10051)" >> "$LOG_FILE" 2>&1
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Port listeners:" >>"$LOG_FILE"
+        ss -tlnp | grep -E ":(10050|10051)" >>"$LOG_FILE" 2>&1
         found=1
     fi
-    
+
     # Check for binaries in specific locations only
     local binary_paths=(
         "/usr/sbin/zabbix_agentd"
@@ -221,20 +221,20 @@ check_installation() {
         "/usr/local/sbin/zabbix_agentd"
         "/usr/local/sbin/zabbix_agent2"
     )
-    
+
     local found_binaries=""
     for binary in "${binary_paths[@]}"; do
         if [[ -f "$binary" ]]; then
             found_binaries="${found_binaries}${binary}\n"
         fi
     done
-    
+
     if [[ -n "$found_binaries" ]]; then
         print_info "Found Zabbix binaries:"
         echo -e "$found_binaries"
         found=1
     fi
-    
+
     if [[ $found -eq 1 ]]; then
         return 0
     else
@@ -246,13 +246,13 @@ check_installation() {
 # Stop agent services
 stop_services() {
     print_header "Stopping Zabbix Agent Services"
-    
+
     # List of Zabbix services to stop
     local zabbix_services=(
         "zabbix-agent.service"
         "zabbix-agent2.service"
     )
-    
+
     # Stop specific Zabbix services
     for service in "${zabbix_services[@]}"; do
         if systemctl is-active --quiet "$service" 2>/dev/null; then
@@ -266,7 +266,7 @@ stop_services() {
             fi
         fi
     done
-    
+
     # Disable services
     for service in "${zabbix_services[@]}"; do
         if systemctl list-unit-files | grep -q "^$service"; then
@@ -275,17 +275,17 @@ stop_services() {
             print_success "Disabled $service"
         fi
     done
-    
+
     # Kill any remaining Zabbix processes with timeout
     # Get our own PID to exclude from killing
     local my_pid=$$
-    
+
     # Find Zabbix processes (excluding this script)
     local zabbix_pids=$(pgrep -f "zabbix_agent" | grep -v "^${my_pid}$" || true)
-    
+
     if [[ -n "$zabbix_pids" ]]; then
         print_info "Killing remaining Zabbix processes..."
-        
+
         # Kill specific PIDs (excluding our script)
         if [[ -n "$zabbix_pids" ]]; then
             echo "$zabbix_pids" | while read -r pid; do
@@ -297,12 +297,12 @@ stop_services() {
                 fi
             done
         fi
-        
+
         sleep 1
-        
+
         # Check if any are still running and force kill if needed
         zabbix_pids=$(pgrep -f "zabbix_agent" | grep -v "^${my_pid}$" || true)
-        
+
         if [[ -n "$zabbix_pids" ]]; then
             if [[ -n "$zabbix_pids" ]]; then
                 echo "$zabbix_pids" | while read -r pid; do
@@ -315,7 +315,7 @@ stop_services() {
             fi
             sleep 1
         fi
-        
+
         print_success "Processes terminated"
     fi
 }
@@ -323,7 +323,7 @@ stop_services() {
 # Remove the package
 remove_package() {
     print_header "Removing Zabbix Agent Package"
-    
+
     # First remove agent2 plugins if present
     local plugin_packages=$(dpkg -l | grep "^ii  zabbix-agent2-plugin" | awk '{print $2}' || true)
     if [[ -n "$plugin_packages" ]]; then
@@ -342,7 +342,7 @@ remove_package() {
             fi
         done
     fi
-    
+
     # Check for zabbix-release package
     if dpkg -l | grep -q "^ii  zabbix-release "; then
         print_info "Removing zabbix-release package..."
@@ -355,11 +355,11 @@ remove_package() {
             log_warn "Failed to remove zabbix-release package"
         fi
     fi
-    
+
     # Try different package names
     local package_patterns=("zabbix-agent" "zabbix-agent2")
     local removed=0
-    
+
     for pattern in "${package_patterns[@]}"; do
         if dpkg -l | grep -q "^ii  ${pattern} "; then
             print_info "Removing package: $pattern"
@@ -382,7 +382,7 @@ remove_package() {
             fi
         fi
     done
-    
+
     # Remove any remaining zabbix packages with wildcard
     print_info "Checking for any other Zabbix packages..."
     local all_zabbix_packages=$(dpkg -l | grep "^ii.*zabbix" | awk '{print $2}' || true)
@@ -396,24 +396,24 @@ remove_package() {
             print_warning "Some Zabbix packages may remain"
         fi
     fi
-    
+
     if [[ $removed -eq 0 ]]; then
         print_warning "No Zabbix packages found to remove"
         print_info "The agent might be installed manually or via a different method"
     fi
-    
+
     # Clean APT cache
     print_info "Cleaning APT cache..."
     log_info "Running apt-get clean and autoclean"
-    apt-get clean 2>&1 | tee -a "$LOG_FILE" > /dev/null
-    apt-get autoclean 2>&1 | tee -a "$LOG_FILE" > /dev/null
+    apt-get clean 2>&1 | tee -a "$LOG_FILE" >/dev/null
+    apt-get autoclean 2>&1 | tee -a "$LOG_FILE" >/dev/null
     print_success "APT cache cleaned"
 }
 
 # Clean up remaining files
 cleanup_files() {
     print_header "Cleaning Up Remaining Files"
-    
+
     local cleanup_dirs=(
         "/etc/zabbix"
         "/var/lib/zabbix"
@@ -432,7 +432,7 @@ cleanup_files() {
         "/run/zabbix"
         "/var/run/zabbix"
     )
-    
+
     for item in "${cleanup_dirs[@]}"; do
         if [[ -e "$item" ]]; then
             print_info "Removing: $item"
@@ -446,7 +446,7 @@ cleanup_files() {
             fi
         fi
     done
-    
+
     # Remove systemd unit files and symlinks
     local unit_files=(
         "/etc/systemd/system/zabbix-agent.service"
@@ -456,7 +456,7 @@ cleanup_files() {
         "/usr/lib/systemd/system/zabbix-agent.service"
         "/usr/lib/systemd/system/zabbix-agent2.service"
     )
-    
+
     for unit_file in "${unit_files[@]}"; do
         if [[ -f "$unit_file" ]] || [[ -L "$unit_file" ]]; then
             print_info "Removing systemd unit: $unit_file"
@@ -464,16 +464,16 @@ cleanup_files() {
             print_success "Removed $unit_file"
         fi
     done
-    
+
     # Remove systemd symlinks from target directories
     local symlink_patterns=(
         "/etc/systemd/system/*.wants/zabbix*"
         "/lib/systemd/system/*.wants/zabbix*"
         "/usr/lib/systemd/system/*.wants/zabbix*"
     )
-    
+
     for pattern in "${symlink_patterns[@]}"; do
-        shopt -s nullglob  # Make globs expand to nothing if no matches
+        shopt -s nullglob # Make globs expand to nothing if no matches
         for symlink in $pattern; do
             if [[ -L "$symlink" ]]; then
                 print_info "Removing systemd symlink: $symlink"
@@ -481,21 +481,21 @@ cleanup_files() {
                 print_success "Removed $symlink"
             fi
         done
-        shopt -u nullglob  # Reset to default behavior
+        shopt -u nullglob # Reset to default behavior
     done
-    
+
     # Reload systemd after removing unit files
     log_info "Reloading systemd daemon"
     systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"
-    
+
     # Remove Zabbix APT repository configurations
     print_info "Removing Zabbix APT repository configurations..."
-    
+
     # Find all Zabbix-related repository files
     shopt -s nullglob
     local repo_files=(/etc/apt/sources.list.d/*zabbix*.list /etc/apt/sources.list.d/*zabbix*.sources)
     shopt -u nullglob
-    
+
     # Add any specific known files
     local known_repos=(
         "/etc/apt/sources.list.d/zabbix.list"
@@ -503,13 +503,13 @@ cleanup_files() {
         "/etc/apt/sources.list.d/zabbix-tools.list"
         "/etc/apt/sources.list.d/zabbix-official.list"
     )
-    
+
     for known_repo in "${known_repos[@]}"; do
-        if [[ -f "$known_repo" ]] && [[ ! " ${repo_files[@]} " =~ " ${known_repo} " ]]; then
+        if [[ -f "$known_repo" ]] && [[ ! " ${repo_files[*]} " =~ " ${known_repo} " ]]; then
             repo_files+=("$known_repo")
         fi
     done
-    
+
     for repo_file in "${repo_files[@]}"; do
         if [[ -f "$repo_file" ]]; then
             print_info "Removing repository file: $repo_file"
@@ -522,14 +522,14 @@ cleanup_files() {
             fi
         fi
     done
-    
+
     # Remove Zabbix GPG keys
     local gpg_keys=(
         "/usr/share/keyrings/zabbix-archive-keyring.gpg"
         "/etc/apt/trusted.gpg.d/zabbix.gpg"
         "/etc/apt/trusted.gpg.d/zabbix-official.gpg"
     )
-    
+
     for gpg_key in "${gpg_keys[@]}"; do
         if [[ -f "$gpg_key" ]]; then
             print_info "Removing GPG key: $gpg_key"
@@ -542,31 +542,31 @@ cleanup_files() {
             fi
         fi
     done
-    
+
     # Also check for any Zabbix sources in the main sources.list
     if grep -q "zabbix" /etc/apt/sources.list 2>/dev/null; then
         print_warning "Found Zabbix entries in /etc/apt/sources.list"
         print_info "You may want to manually remove these entries from /etc/apt/sources.list"
         log_warn "Zabbix entries found in /etc/apt/sources.list - manual removal required"
     fi
-    
+
     # Update APT cache after removing repositories
-    if [[ -n "$(ls -A /etc/apt/sources.list.d/*zabbix* 2>/dev/null || true)" ]] || \
-       [[ -n "$(find /etc/apt/sources.list.d/ -name "*zabbix*" 2>/dev/null || true)" ]]; then
+    if [[ -n "$(ls -A /etc/apt/sources.list.d/*zabbix* 2>/dev/null || true)" ]] ||
+        [[ -n "$(find /etc/apt/sources.list.d/ -name "*zabbix*" 2>/dev/null || true)" ]]; then
         print_info "Some Zabbix repository files may still exist"
     else
         print_info "Updating APT cache after repository removal..."
         log_info "Updating APT cache"
-        if apt-get update 2>&1 | tee -a "$LOG_FILE" > /dev/null; then
+        if apt-get update 2>&1 | tee -a "$LOG_FILE" >/dev/null; then
             print_success "APT cache updated"
         else
             print_warning "Failed to update APT cache"
         fi
     fi
-    
+
     # Check for any remaining zabbix files in specific directories
     print_info "Checking for any remaining Zabbix files..."
-    
+
     # Define specific paths to check (much faster than searching entire filesystem)
     local check_paths=(
         "/etc/zabbix*"
@@ -579,12 +579,12 @@ cleanup_files() {
         "/var/log/zabbix*"
         "/opt/zabbix*"
     )
-    
+
     local remaining_files=""
     for path_pattern in "${check_paths[@]}"; do
         # Use shell globbing instead of find for speed
         # Note: We can't redirect glob expansion errors, so we check existence
-        shopt -s nullglob  # Make globs expand to nothing if no matches
+        shopt -s nullglob # Make globs expand to nothing if no matches
         for file in $path_pattern; do
             if [[ -e "$file" ]]; then
                 # Filter out false positives
@@ -593,9 +593,9 @@ cleanup_files() {
                 fi
             fi
         done
-        shopt -u nullglob  # Reset to default behavior
+        shopt -u nullglob # Reset to default behavior
     done
-    
+
     # Also check systemd locations
     for unit_dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
         if [[ -d "$unit_dir" ]]; then
@@ -608,7 +608,7 @@ cleanup_files() {
             shopt -u nullglob
         fi
     done
-    
+
     # Clean up all Zabbix log files (except our uninstall log)
     print_info "Cleaning up all Zabbix log files..."
     local log_files=$(find /var/log -name "*zabbix*" 2>/dev/null || true)
@@ -622,12 +622,12 @@ cleanup_files() {
             fi
         done
     fi
-    
+
     # Check for zabbix user and group
     if id zabbix &>/dev/null; then
         print_info "Found zabbix user account"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Zabbix user found: $(id zabbix)" >> "$LOG_FILE"
-        
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Zabbix user found: $(id zabbix)" >>"$LOG_FILE"
+
         if [[ "$INTERACTIVE" == "true" ]]; then
             if confirm_action "Do you want to remove the zabbix user account?"; then
                 print_info "Removing zabbix user account..."
@@ -645,7 +645,7 @@ cleanup_files() {
                         log_warn "Failed to remove zabbix user account"
                     fi
                 fi
-                
+
                 # Also remove group if it exists
                 if getent group zabbix >/dev/null 2>&1; then
                     print_info "Removing zabbix group..."
@@ -667,13 +667,13 @@ cleanup_files() {
             log_info "Zabbix user account preserved in non-interactive mode"
         fi
     fi
-    
+
     if [[ -n "$remaining_files" ]]; then
         print_warning "Found some remaining files:"
         echo -e "$remaining_files"
         print_info "You may want to review and remove these manually if needed"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Remaining files found:" >> "$LOG_FILE"
-        echo -e "$remaining_files" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Remaining files found:" >>"$LOG_FILE"
+        echo -e "$remaining_files" >>"$LOG_FILE"
     else
         print_success "No remaining Zabbix files found"
         log_info "No remaining Zabbix files found"
@@ -683,13 +683,13 @@ cleanup_files() {
 # Verify removal
 verify_removal() {
     print_header "Verifying Removal"
-    
+
     local issues=0
-    
+
     # Check packages
     log_info "Starting verification of removal"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining packages" >> "$LOG_FILE"
-    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining packages" >>"$LOG_FILE"
+
     # Check for main packages and plugins
     local remaining_packages=$(dpkg -l | grep "^ii.*zabbix-agent" | awk '{print $2}' || true)
     if [[ -n "$remaining_packages" ]]; then
@@ -699,45 +699,45 @@ verify_removal() {
                 echo "  - $pkg"
             fi
         done
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Packages still installed:" >> "$LOG_FILE"
-        echo "$remaining_packages" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Packages still installed:" >>"$LOG_FILE"
+        echo "$remaining_packages" >>"$LOG_FILE"
         issues=1
     else
         print_success "All Zabbix packages successfully removed"
         log_info "Package removal verified"
     fi
-    
+
     # Check for specific services
     local zabbix_services=(
         "zabbix-agent.service"
         "zabbix-agent2.service"
     )
-    
+
     for service in "${zabbix_services[@]}"; do
         if systemctl is-active --quiet "$service" 2>/dev/null; then
             print_warning "Service $service is still running"
             issues=1
         fi
     done
-    
+
     if [[ $issues -eq 0 ]]; then
         print_success "No Zabbix services are running"
     fi
-    
+
     # Check for any remaining Zabbix units (not-found units are expected after uninstall)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining systemd units" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Checking for remaining systemd units" >>"$LOG_FILE"
     local remaining_units=$(systemctl list-units --all | grep -i "zabbix" | grep -v "slice" | grep -v "not-found" || true)
     if [[ -n "$remaining_units" ]]; then
         print_warning "Found remaining Zabbix systemd units:"
         echo "$remaining_units"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] Remaining systemd units:" >> "$LOG_FILE"
-        echo "$remaining_units" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] Remaining systemd units:" >>"$LOG_FILE"
+        echo "$remaining_units" >>"$LOG_FILE"
         issues=1
     else
         print_success "No active Zabbix systemd units remaining"
         log_info "No active systemd units found"
     fi
-    
+
     # Check listening ports (Zabbix agent ports: 10050 and 10051)
     if ss -tlnp | grep -E ":(10050|10051)"; then
         print_warning "Zabbix agent ports (10050/10051) are still in use"
@@ -746,11 +746,11 @@ verify_removal() {
     else
         print_success "Zabbix agent ports (10050/10051) are not in use"
     fi
-    
+
     # Check for running processes (excluding this script)
     local my_pid=$$
     local remaining_pids=$(pgrep -f "zabbix_agent" | grep -v "^${my_pid}$" || true)
-    
+
     # Filter out any invalid PIDs
     local valid_pids=""
     for pid in $remaining_pids; do
@@ -758,7 +758,7 @@ verify_removal() {
             valid_pids="$valid_pids $pid"
         fi
     done
-    
+
     if [[ -n "$valid_pids" ]]; then
         print_warning "Zabbix processes are still running:"
         for pid in $valid_pids; do
@@ -771,7 +771,7 @@ verify_removal() {
     else
         print_success "No Zabbix processes running"
     fi
-    
+
     if [[ $issues -eq 0 ]]; then
         print_success "Complete removal verified!"
         log_info "Verification completed successfully - no issues found"
@@ -780,7 +780,7 @@ verify_removal() {
         print_warning "Some minor issues found during verification - this is normal"
         print_info "The agent has been uninstalled, but some cleanup may be needed"
         log_warn "Verification completed with minor issues (issues=$issues)"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Total verification issues: $issues" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Total verification issues: $issues" >>"$LOG_FILE"
         # Don't fail the script for minor verification issues
         return 0
     fi
@@ -812,52 +812,52 @@ confirm_action() {
 main() {
     # Parse command line arguments
     parse_args "$@"
-    
+
     # Set up logging
-    echo "Uninstallation started at $(date)" > "$LOG_FILE"
+    echo "Uninstallation started at $(date)" >"$LOG_FILE"
     chmod 640 "$LOG_FILE"
-    
+
     echo -e "${BOLD}${CYAN}Zabbix Agent Uninstallation Script${NC}"
     echo -e "${CYAN}==================================${NC}"
     print_info "Log file: $LOG_FILE"
     echo ""
-    
+
     log_info "Starting Zabbix agent uninstallation"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.0" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >> "$LOG_FILE"
-    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Script version: 1.0" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Running as user: $(whoami)" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] System: $(uname -a)" >>"$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Interactive mode: $INTERACTIVE" >>"$LOG_FILE"
+
     check_privileges
-    
+
     if ! check_installation; then
         log_info "Zabbix agent not found. Nothing to uninstall."
         print_info "Nothing to uninstall. Exiting."
         exit 0
     fi
-    
+
     # Ask for confirmation in interactive mode
     if ! confirm_action "Are you sure you want to uninstall the Zabbix agent?"; then
         log_info "Uninstallation cancelled by user"
         print_info "Uninstallation cancelled."
         exit 0
     fi
-    
+
     log_info "User confirmed uninstallation"
-    
+
     stop_services
     remove_package
     cleanup_files
     verify_removal
-    
+
     print_header "Uninstallation Complete"
     print_success "Zabbix agent has been successfully removed!"
     print_info "Your system is no longer being monitored by Zabbix"
-    
+
     # Save completion to log
-    echo "Uninstallation completed at $(date)" >> "$LOG_FILE"
+    echo "Uninstallation completed at $(date)" >>"$LOG_FILE"
     log_info "Zabbix agent uninstallation completed successfully"
-    
+
     echo ""
     echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}✓ Uninstallation log saved to: ${BOLD}$LOG_FILE${NC}"
