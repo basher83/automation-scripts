@@ -16,8 +16,8 @@ _book
 *.pdf
 
 
-# Ignore vscode AI rules
-.github/copilot-instructions.md
+# Ignore vscode AI rules (but allow the main copilot-instructions.md)
+# .github/copilot-instructions.md
 
 # Mise local configuration
 .mise.local.toml
