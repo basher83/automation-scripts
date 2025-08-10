@@ -1,10 +1,16 @@
 # GitHub Copilot Instructions for automation-scripts
 
-**ALWAYS follow these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
+**ALWAYS follow these instructions first and fallback to search or bash commands
+only when you encounter unexpected information that does not match the info
+here.**
 
 ## Repository Overview
 
-This is a collection of DevOps automation scripts written in Bash for system administration tasks. **This is NOT a traditional software project** - there is no compilation, no package.json, no Makefile, and no complex build system. All functionality is delivered through standalone Bash scripts that can be executed directly.
+This is a collection of DevOps automation scripts written in Bash for system
+administration tasks. **This is NOT a traditional software project** - there is
+no compilation, no package.json, no Makefile, and no complex build system. All
+functionality is delivered through standalone Bash scripts that can be executed
+directly.
 
 ## Working Effectively
 
@@ -23,7 +29,8 @@ find . -name "*.sh" -type f -exec bash -n {} \;
 ./run-shellcheck.sh
 ```
 
-**TIMING**: All validation completes in under 5 seconds. **NEVER CANCEL** these commands - they are very fast.
+**TIMING**: All validation completes in under 5 seconds. **NEVER CANCEL** these
+commands - they are very fast.
 
 ### Making Scripts Executable
 
@@ -34,7 +41,8 @@ find . -name "*.sh" -type f -exec chmod +x {} \;
 
 ### Development Environment Setup (Optional)
 
-The repository supports mise for tool management, but **validation can be done without it**:
+The repository supports mise for tool management, but **validation can be done
+without it**:
 
 ```bash
 # OPTIONAL: Install mise and tools (if you want enhanced development experience)
@@ -50,6 +58,7 @@ mise run format      # Format with shfmt (if you modify scripts)
 ## Validation Requirements
 
 ### ALWAYS Run Before Committing
+
 ```bash
 # 1. Syntax check (required, <1 second)
 find . -name "*.sh" -type f -exec bash -n {} \;
@@ -58,25 +67,34 @@ find . -name "*.sh" -type f -exec bash -n {} \;
 find . -name "*.sh" -type f -not -path './.git/*' -exec shellcheck -S error {} \;
 ```
 
-**NEVER CANCEL**: These validation commands are very fast (under 5 seconds total). Wait for completion.
+**NEVER CANCEL**: These validation commands are very fast (under 5 seconds
+total). Wait for completion.
 
 **NOTE**: There are currently 2 known ShellCheck errors in the repository:
-- `./monitoring/zabbix/uninstall-agent.sh` (line 508) - Array concatenation issue
-- `./proxmox-virtual-environment/prometheus-pve-exporter/uninstall-pve-exporter.sh` (line 245) - Local variable outside function
+
+- `./monitoring/zabbix/uninstall-agent.sh` (line 508) - Array concatenation
+  issue
+- `./proxmox-virtual-environment/prometheus-pve-exporter/uninstall-pve-exporter.sh`
+  (line 245) - Local variable outside function
 
 These are existing issues - focus on not introducing NEW errors.
 
 ### CI/CD Validation
+
 The GitHub Actions workflow (`.github/workflows/shellcheck.yml`) will fail if:
+
 - Any script has syntax errors  
 - Any script fails ShellCheck with error severity
-- **ALWAYS run the validation commands above before committing to prevent CI failures**
+- **ALWAYS run the validation commands above before committing to prevent CI
+  failures**
 
 ## Manual Validation Scenarios
 
-Since these are system administration scripts, **ALWAYS test actual functionality** after making changes:
+Since these are system administration scripts, **ALWAYS test actual
+functionality** after making changes:
 
 ### For Bootstrap/Installation Scripts
+
 ```bash
 # CAUTION: Bootstrap script starts installing packages immediately
 # Test in safe way first
@@ -88,6 +106,7 @@ NON_INTERACTIVE=1 ./bootstrap/bootstrap.sh  # Will start actual installation
 ```
 
 ### For Monitoring/Status Scripts  
+
 ```bash
 # Test PVE backup status with different parameters
 ./proxmox-virtual-environment/pve-backup-status.sh 10           # Show last 10 entries
@@ -98,6 +117,7 @@ NON_INTERACTIVE=1 ./bootstrap/bootstrap.sh  # Will start actual installation
 ```
 
 ### For Documentation Scripts
+
 ```bash
 # Test documentation tree updates (safe to run)
 ./documentation/update-trees.sh  # First run
@@ -107,7 +127,9 @@ NON_INTERACTIVE=1 ./bootstrap/bootstrap.sh  # Will start actual installation
 ```
 
 ### Remote Execution Testing (Critical Pattern)
-Many scripts support remote execution via curl. **ALWAYS test this pattern** for scripts that will be deployed:
+
+Many scripts support remote execution via curl. **ALWAYS test this pattern**
+for scripts that will be deployed:
 
 ```bash
 # Test script can be piped (simulates remote execution)
@@ -126,7 +148,8 @@ cat ./documentation/update-trees.sh | bash
 ## Common Development Tasks
 
 ### Repository Structure
-```
+
+```text
 automation-scripts/
 ├── bootstrap/                    # Development environment setup tools
 ├── monitoring/                   # CheckMK, Zabbix monitoring agents  
@@ -144,19 +167,23 @@ automation-scripts/
 ### Key Scripts by Category
 
 **Bootstrap (`bootstrap/bootstrap.sh`)**:
+
 - Installs modern CLI tools (eza, fd, uv, ripgrep)  
 - Supports both local and remote execution
 - **CAUTION**: Starts installing packages immediately when run
 
 **Monitoring (`monitoring/checkmk/`)**:
+
 - `install-agent.sh` - Installs CheckMK monitoring agent
 - `uninstall-agent.sh` - Removes CheckMK agent completely
 
 **Proxmox VE (`proxmox-virtual-environment/`)**:  
+
 - `pve-backup-status.sh` - Shows backup task status with colors
 - `prometheus-pve-exporter/` - Prometheus exporter management
 
 ### Code Search and Navigation
+
 ```bash
 # Search using ripgrep (if available, otherwise use grep)
 rg "pattern" --type sh
@@ -173,6 +200,7 @@ ls -la --tree || tree || ls -la
 All scripts follow these conventions:
 
 ### Required Header Pattern
+
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -180,6 +208,7 @@ trap 'echo "Error occurred at line $LINENO. Exit code: $?" >&2' ERR
 ```
 
 ### Logging Pattern (for installation/system modification scripts)
+
 ```bash
 # Define timestamped log file
 LOG_FILE="/var/log/script-name-$(date +%Y%m%d_%H%M%S).log"
@@ -192,6 +221,7 @@ log_info() {
 ```
 
 ### Color Output Pattern
+
 ```bash
 # Auto-detect color support
 if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -206,6 +236,7 @@ fi
 ```
 
 ### Non-Interactive Mode Pattern
+
 ```bash
 INTERACTIVE=true
 if [[ ! -t 0 ]] || [[ "${NON_INTERACTIVE:-}" == "true" ]]; then
@@ -216,21 +247,27 @@ fi
 ## Security and Safety
 
 ### GPG Verification
+
 Scripts may include GPG verification for package installations:
+
 ```bash
 # Can be skipped for testing with environment variables
 EZA_SKIP_GPG_VERIFY=1 ./bootstrap/bootstrap.sh
 ```
 
 ### Idempotency
+
 **All scripts must be safe to run multiple times**. Always test:
+
 ```bash
 ./script.sh  # First run
 ./script.sh  # Second run - should not fail or create duplicates
 ```
 
 ### Process Safety
+
 Scripts that kill processes use safe patterns to avoid self-termination:
+
 ```bash
 # CORRECT: Exclude current script PID
 my_pid=$$
@@ -249,16 +286,19 @@ pgrep -f "pattern" | grep -v "^${my_pid}$"
 ### Common Issues
 
 **ShellCheck Errors**: Check `.shellcheckrc` for configuration. Common fixes:
-- Use proper array syntax: `"${array[@]}"` 
+
+- Use proper array syntax: `"${array[@]}"`
 - Avoid `local` outside functions
 - Quote variables: `"$variable"`
 
 **Script Won't Execute**: Check permissions:
+
 ```bash
 chmod +x script-name.sh
 ```
 
 **Hanging on Prompts**: Use non-interactive mode:
+
 ```bash
 NON_INTERACTIVE=1 ./script.sh
 ```
@@ -276,8 +316,16 @@ NON_INTERACTIVE=1 ./script.sh
 
 When modifying scripts, ALWAYS:
 
-1. **Syntax validation**: `find . -name "*.sh" -type f -exec bash -n {} \;` (takes <1 second)
-2. **ShellCheck**: `find . -name "*.sh" -type f -not -path './.git/*' -exec shellcheck -S error {} \;` (takes ~3.6 seconds)
+1. **Syntax validation**: `find . -name "*.sh" -type f -exec bash -n {} \;`
+   (takes <1 second)
+2. **ShellCheck**:
+
+   ```bash
+   find . -name "*.sh" -type f -not -path './.git/*' \
+     -exec shellcheck -S error {} \;
+   ```
+
+   (takes ~3.6 seconds)
 3. **Execute the script**: Test actual functionality, not just syntax
 4. **Test idempotency**: Run the script twice to ensure safety  
 5. **Test non-interactive mode**: `NON_INTERACTIVE=1 ./script.sh` (if applicable)
@@ -288,8 +336,10 @@ When modifying scripts, ALWAYS:
 
 ```bash
 # Complete validation workflow (takes ~4 seconds total)
-find . -name "*.sh" -type f -exec bash -n {} \;                           # Syntax
-find . -name "*.sh" -type f -not -path './.git/*' -exec shellcheck -S error {} \;  # Linting
+find . -name "*.sh" -type f -exec bash -n {} \;                           
+# Syntax
+find . -name "*.sh" -type f -not -path './.git/*' -exec shellcheck -S error {} \;
+# Linting
 
 # Test a safe script (documentation updater)
 ./documentation/update-trees.sh     # First run
@@ -297,7 +347,8 @@ find . -name "*.sh" -type f -not -path './.git/*' -exec shellcheck -S error {} \
 cat ./documentation/update-trees.sh | bash  # Test remote execution
 
 # Test script that requires environment
-./proxmox-virtual-environment/pve-backup-status.sh 5 --no-color  # Fails gracefully without Proxmox
+./proxmox-virtual-environment/pve-backup-status.sh 5 --no-color  
+# Fails gracefully without Proxmox
 
 # NEVER run installation scripts unless you intend to install:
 # ./bootstrap/bootstrap.sh  # Starts installing packages immediately!
@@ -306,8 +357,11 @@ cat ./documentation/update-trees.sh | bash  # Test remote execution
 ### Expected Error Handling
 
 Scripts should handle missing dependencies gracefully:
+
 - PVE scripts: "Error: Log path '/var/log/pve/tasks' does not exist"  
 - Documentation scripts: "File not found, skipping..." warnings
 - Missing tools: Scripts check for requirements and provide clear error messages
 
-**Remember**: This repository is about DevOps automation scripts that need to work reliably in production environments. Focus on validation, safety, and real-world testing scenarios.
+**Remember**: This repository is about DevOps automation scripts that need to
+work reliably in production environments. Focus on validation, safety, and
+real-world testing scenarios.
