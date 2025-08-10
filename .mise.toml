@@ -27,7 +27,7 @@ validate = "find . -name '*.sh' -type f -not -path './.git/*' -exec shellcheck -
 validate-all = "find . -name '*.sh' -type f -not -path './.git/*' -exec shellcheck {} +"
 format = "shfmt -w -i 4 -ci ."
 check-format = "shfmt -d -i 4 -ci ."
-test = "./run-shellcheck.sh"
+test = "./scripts/run-shellcheck.sh"
 lint = { depends = ["validate"], description = "Run shellcheck validation (alias)" }
 
 [settings]

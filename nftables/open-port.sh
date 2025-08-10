@@ -172,6 +172,9 @@ show_usage() {
     echo "  --no-color            Disable colored output"
     echo "  --dry-run             Show what would be done without making changes"
     echo ""
+    echo "Notes:"
+    echo "  - CHAIN and TABLE must use only letters, numbers, underscore, or hyphen (^[A-Za-z0-9_-]+$)"
+    echo ""
     echo "Examples:"
     echo "  # Open port 19999 (default)"
     echo "  $0"
@@ -259,6 +262,17 @@ validate_inputs() {
     # Validate family
     if [[ "$FAMILY" != "inet" ]] && [[ "$FAMILY" != "ip" ]] && [[ "$FAMILY" != "ip6" ]]; then
         log_error "Invalid address family: $FAMILY (must be inet, ip, or ip6)"
+        exit 1
+    fi
+
+    # Validate table and chain names (alphanumeric, underscore, hyphen)
+    if [[ -z "$TABLE" ]] || [[ ! "$TABLE" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        log_error "Invalid table name: $TABLE (allowed: letters, numbers, underscore, hyphen)"
+        exit 1
+    fi
+
+    if [[ -z "$CHAIN" ]] || [[ ! "$CHAIN" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        log_error "Invalid chain name: $CHAIN (allowed: letters, numbers, underscore, hyphen)"
         exit 1
     fi
 }
@@ -401,12 +415,10 @@ add_rule() {
 
     # Add the rule at the beginning of the chain
     # insert rule adds at the beginning by default (no position parameter needed)
-    local cmd="nft insert rule $family $table $chain $protocol dport $port accept"
-
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would execute: $cmd"
+        log_info "[DRY RUN] Would execute: nft insert rule $family $table $chain $protocol dport $port accept"
     else
-        if eval "$cmd"; then
+        if nft insert rule "$family" "$table" "$chain" "$protocol" dport "$port" accept; then
             log_success "Added rule: $protocol port $port -> ACCEPT (at beginning of chain)"
         else
             log_error "Failed to add rule"
@@ -443,12 +455,10 @@ remove_rule() {
         return 1
     fi
 
-    local cmd="nft delete rule $family $table $chain handle $handle"
-
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would execute: $cmd"
+        log_info "[DRY RUN] Would execute: nft delete rule $family $table $chain handle $handle"
     else
-        if $cmd; then
+        if nft delete rule "$family" "$table" "$chain" handle "$handle"; then
             log_success "Removed rule: $protocol port $port (handle $handle)"
         else
             log_error "Failed to remove rule"

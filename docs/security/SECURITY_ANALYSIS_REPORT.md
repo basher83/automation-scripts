@@ -19,6 +19,8 @@ I performed a comprehensive security analysis of all bash scripts in the automat
 
 The scripts demonstrate **good security practices** overall, with proper error handling, input validation, and defensive programming techniques. However, I identified several areas for improvement.
 
+Note: Some findings are intentionally accepted for the homelab context and are documented in [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md). Treat those as non-actionable unless the context changes.
+
 ## Findings by Script
 
 ### 1. `/proxmox-virtual-environment/pve-backup-status.sh`
@@ -44,6 +46,8 @@ The scripts demonstrate **good security practices** overall, with proper error h
 
   **Mitigation**: Already handles errors with `2>/dev/null`
 
+  Status: Still present (low risk). Parsing failures are handled gracefully.
+
 ### 2. `/monitoring/checkmk/install-agent.sh`
 
 **Security Level: Good**
@@ -67,10 +71,16 @@ The scripts demonstrate **good security practices** overall, with proper error h
   **Risk**: Man-in-the-middle attacks, package tampering
   **Recommendation**: Use HTTPS URLs or implement checksum verification
 
+  Status: Not addressed. Still using HTTP for both downloads without verification.
+  Accepted (homelab): See [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md).
+
 ⚠️ **Medium Issues:**
 
 - No GPG signature verification for downloaded packages
 - No checksum validation of downloads
+
+Status: Not addressed. Consider publishing and validating checksums or verifying upstream signatures.
+Accepted (homelab): See [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md).
 
 ### 3. `/bootstrap/bootstrap.sh`
 
@@ -94,9 +104,11 @@ The scripts demonstrate **good security practices** overall, with proper error h
 
   **Mitigation**: Script validates content and offers manual review
 
+  Status: Present but reasonably mitigated (uses HTTPS, basic content checks, and optional interactive review).
+
 ### 4. `/nftables/open-port.sh`
 
-**Security Level: Excellent**
+**Security Level: Very Good**
 
 ✅ **Strengths:**
 
@@ -106,13 +118,19 @@ The scripts demonstrate **good security practices** overall, with proper error h
 - Safe handling of nftables commands
 - Backup creation before changes
 - Dry-run mode for testing
-- No eval usage or command injection risks
+- Backup creation before changes
+- Dry-run mode for testing
 
 ✅ **Best Practices:**
 
 - Uses parameterized commands instead of string concatenation
 - Validates all user inputs before use
 - Implements rollback capability
+
+✅ **Fixes/Changes:**
+
+- Removed `eval`; now calls `nft` with properly quoted arguments
+- Added strict validation for `--table`/`--chain` (letters, numbers, underscore, hyphen)
 
 ### 5. `/proxmox-backup-server/pbs-backup-health.sh`
 
@@ -136,9 +154,10 @@ The scripts demonstrate **good security practices** overall, with proper error h
 
 ⚠️ **Medium Issues:**
 
-- No certificate validation (should use curl's certificate options)
 - API token passed via command line (visible in process list)
   **Recommendation**: Use curl's `--config` option or stdin
+
+ℹ️ **Resolved/Clarified:** Uses HTTPS by default and does not specify `--insecure`; curl will perform certificate validation by default. Certificate validation is therefore enabled (subject to a valid CA chain on the host).
 
 ### 6. `/documentation/update-trees.sh`
 
@@ -160,6 +179,8 @@ The scripts demonstrate **good security practices** overall, with proper error h
   ```
 
   **Mitigation**: Only called internally with hardcoded values
+
+  Status: Still present (low risk in current usage). Inputs are internal and fixed.
 
 ### 7. `/proxmox-virtual-environment/prometheus-pve-exporter/install-pve-exporter.sh`
 
@@ -183,6 +204,9 @@ The scripts demonstrate **good security practices** overall, with proper error h
   **Risk**: Susceptible to MITM attacks
   **Recommendation**: Use proper certificates and enable SSL verification
 
+  Status: Partially addressed. Script now supports `--verify-ssl` to enable verification, but the default remains `false`.
+  Accepted default (homelab): See [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md).
+
 ### 8. `/consul/prometheus/prometheus-consul-exporter.sh`
 
 **Security Level: Very Good**
@@ -199,15 +223,22 @@ The scripts demonstrate **good security practices** overall, with proper error h
 
 - Token passed to Netdata config file in plain text (necessary for operation)
 
+Status: Still present (by design of the Netdata Consul collector). File permissions are set to 640.
+
 ## General Security Recommendations
 
 ### 1. **Certificate Validation**
 
-Several scripts disable SSL/TLS certificate validation. This should be addressed by:
+- One script (`prometheus-pve-exporter`) defaults to `verify_ssl: false`; enable verification or pass `--verify-ssl`.
+- Other scripts either use HTTP (no TLS) or rely on curl’s default TLS verification when using HTTPS.
+
+Recommended actions:
 
 - Installing proper CA certificates
 - Using certificate pinning for known hosts
 - At minimum, documenting the security implications
+
+Homelab exception: Default `verify_ssl: false` for the PVE exporter is accepted. See [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md).
 
 ### 2. **Download Verification**
 
@@ -217,6 +248,8 @@ Scripts that download files should implement:
 - GPG signature verification
 - SHA256 checksum validation
 - Content validation before execution
+
+Homelab exception: Internal CheckMK downloads over HTTP without GPG/checksum validation are accepted. See [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md).
 
 ### 3. **Secret Management**
 
@@ -232,7 +265,7 @@ Scripts that download files should implement:
 
 ### 5. **Network Security**
 
-- Always use HTTPS/TLS for API communications
+- Prefer HTTPS/TLS for API communications (or add strong integrity checks when using HTTP on trusted LANs)
 - Implement timeout values for network operations
 - Consider implementing retry logic with exponential backoff
 
@@ -253,18 +286,20 @@ Scripts that download files should implement:
 
 The bash scripts in this repository demonstrate a strong security posture with proper defensive programming practices. The main areas for improvement are:
 
-1. Enabling SSL/TLS certificate validation
-2. Using HTTPS instead of HTTP for downloads
-3. Implementing download verification (checksums/signatures)
-4. Avoiding secrets in command line arguments
+1. Prefer HTTPS over HTTP for downloads in `monitoring/checkmk/install-agent.sh` or add strong checksum/signature verification
+2. Implement download verification (checksums/signatures) where missing
+3. Avoid passing secrets in command line arguments (e.g., curl headers) to reduce exposure in process listings
+4. Consider enabling SSL/TLS certificate verification by default in `prometheus-pve-exporter` when feasible
 
 None of the identified issues represent critical vulnerabilities that would allow immediate system compromise. The scripts follow bash security best practices and show careful attention to input validation and error handling.
 
 ## Risk Summary
 
 - **Critical Issues**: 0
-- **High Risk Issues**: 2 (HTTP downloads without verification)
-- **Medium Risk Issues**: 3 (SSL validation disabled, secrets in CLI)
-- **Low Risk Issues**: 5 (minor validation improvements)
+- **High Risk Issues**: 2 (HTTP downloads without verification x2)
+- **Medium Risk Issues**: 4 (missing GPG/checksum verification; default `verify_ssl: false`; secrets in CLI)
+- **Low Risk Issues**: 5 (minor validation and robustness improvements)
 
-Overall Risk Level: **LOW to MEDIUM** - The scripts are production-ready with some security hardening recommendations.
+Overall Risk Level: **LOW to MEDIUM** - The scripts are production-ready with clear, contained hardening items.
+
+Note: Items marked “Accepted (homelab)” in sections above are documented in [Accepted Security Considerations](./SECURITY_ACCEPTED_RISKS.md) and are not action items unless the environment or requirements change.

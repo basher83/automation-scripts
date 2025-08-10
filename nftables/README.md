@@ -76,27 +76,33 @@ sudo ./open-port.sh --port 80 --no-color
 
 #### Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-p, --port PORT` | Port number to open | 19999 |
-| `-P, --protocol PROTO` | Protocol (tcp/udp) | tcp |
-| `-c, --chain CHAIN` | NFTables chain name | input |
-| `-t, --table TABLE` | NFTables table name | filter |
-| `-f, --family FAMILY` | Address family (inet/ip/ip6) | inet |
-| `-r, --remove` | Remove rule instead of adding | - |
-| `-b, --backup-only` | Only create backup | - |
-| `--dry-run` | Preview changes without applying | - |
-| `--no-color` | Disable colored output | - |
-| `-h, --help` | Show help message | - |
+| Option                 | Description                      | Default |
+| ---------------------- | -------------------------------- | ------- |
+| `-p, --port PORT`      | Port number to open              | 19999   |
+| `-P, --protocol PROTO` | Protocol (tcp/udp)               | tcp     |
+| `-c, --chain CHAIN`    | NFTables chain name              | input   |
+| `-t, --table TABLE`    | NFTables table name              | filter  |
+| `-f, --family FAMILY`  | Address family (inet/ip/ip6)     | inet    |
+| `-r, --remove`         | Remove rule instead of adding    | -       |
+| `-b, --backup-only`    | Only create backup               | -       |
+| `--dry-run`            | Preview changes without applying | -       |
+| `--no-color`           | Disable colored output           | -       |
+| `-h, --help`           | Show help message                | -       |
+
+#### Notes
+
+- `CHAIN` and `TABLE` names must use only letters, numbers, underscore, or hyphen (regex: `^[A-Za-z0-9_-]+$`).
 
 #### Examples
 
 ##### Open port for Netdata monitoring
+
 ```bash
 sudo ./open-port.sh --port 19999
 ```
 
 ##### Open HTTPS port with dry run first
+
 ```bash
 # Preview changes
 sudo ./open-port.sh --port 443 --dry-run
@@ -106,6 +112,7 @@ sudo ./open-port.sh --port 443
 ```
 
 ##### Open multiple ports
+
 ```bash
 # Web server ports
 sudo ./open-port.sh --port 80
@@ -116,6 +123,7 @@ sudo ./open-port.sh --port 2222
 ```
 
 ##### Remove a port rule
+
 ```bash
 sudo ./open-port.sh --port 8080 --remove
 ```
@@ -129,6 +137,7 @@ The script automatically creates backups before making any changes:
 - Timestamped format: `nftables-backup-YYYYMMDD_HHMMSS.conf`
 
 To restore from backup:
+
 ```bash
 # List available backups
 ls -la /var/backups/nftables/
@@ -153,17 +162,20 @@ ansible nomad_nodes -m shell -a "sudo nft list chain inet filter input | grep 19
 #### Troubleshooting
 
 1. **Script fails with "nftables is not installed"**
+
    ```bash
    sudo apt update && sudo apt install nftables
    ```
 
 2. **Service not starting**
+
    ```bash
    sudo systemctl status nftables
    sudo journalctl -u nftables -n 50
    ```
 
 3. **Rule not persisting after reboot**
+
    - Check if nftables service is enabled: `systemctl is-enabled nftables`
    - Verify config file exists: `ls -la /etc/nftables.conf`
 
@@ -183,12 +195,14 @@ ansible nomad_nodes -m shell -a "sudo nft list chain inet filter input | grep 19
 #### Logging
 
 All operations are logged to `/var/log/nftables-port-management.log` with:
+
 - Timestamps for each operation
 - Success/failure status
 - Detailed error messages
 - Command execution details
 
 View logs:
+
 ```bash
 sudo tail -f /var/log/nftables-port-management.log
 ```
