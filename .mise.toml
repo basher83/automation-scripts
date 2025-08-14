@@ -13,7 +13,7 @@ shfmt = "3.12.0"             # Shell script formatter
 # Development tools
 python = "3.12"              # For any Python-based utilities
 node = "22"                  # For npm-based tools if needed
-golang = "1.24.6"              # For Go-based tools (fd, etc.)
+golang = "1.25.0"              # For Go-based tools (fd, etc.)
 
 # Task runner
 task = "latest"              # Taskfile task runner
