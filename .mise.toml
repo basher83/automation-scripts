@@ -11,7 +11,7 @@ shellcheck = "0.11.0"        # Shell script static analysis
 shfmt = "3.12.0"             # Shell script formatter
 
 # Development tools
-python = "3.12"              # For any Python-based utilities
+python = "3.14.0"              # For any Python-based utilities
 node = "22"                  # For npm-based tools if needed
 golang = "1.25.3"              # For Go-based tools (fd, etc.)
 
